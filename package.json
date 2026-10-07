@@ -22,6 +22,7 @@
     "client.js",
     "cordis.patch.yml",
     "README.md",
+    "CHANGELOG.md",
     "assets"
   ],
   "dsh": {
@@ -41,10 +42,10 @@
   "author": "FiVE0016",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FiVE0016/DBF-dsh-bubble-fold.git"
+    "url": "git+https://github.com/FiVE0016/dsh-bubble-fold.git"
   },
-  "homepage": "https://github.com/FiVE0016/DBF-dsh-bubble-fold#readme",
+  "homepage": "https://github.com/FiVE0016/dsh-bubble-fold#readme",
   "bugs": {
-    "url": "https://github.com/FiVE0016/DBF-dsh-bubble-fold/issues"
+    "url": "https://github.com/FiVE0016/dsh-bubble-fold/issues"
   }
 }

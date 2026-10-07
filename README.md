@@ -1,5 +1,15 @@
 # dsh-bubble-fold
 
+[![test](https://github.com/FiVE0016/dsh-bubble-fold/actions/workflows/test.yml/badge.svg)](https://github.com/FiVE0016/dsh-bubble-fold/actions/workflows/test.yml)
+
+> **English** — A display-only plugin for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness): it folds overlong messages and the whole run of work-step rows between two messages into one click. **The newest turn always stays open**; older turns and every step block start folded. It never writes to the session log, the model or the agent — turn it off and the transcript is stock again.
+>
+> ```sh
+> dsh plugin --profile web add 'github:FiVE0016/dsh-bubble-fold#v0.9.0'
+> ```
+>
+> Screenshots and the full manual are in Chinese below.
+
 让 DSH 里**过长的消息**（你自己发的长输入、助手的长回复）折叠成几行预览，点一下展开。
 
 > 术语：**用户消息**在宿主代码里就叫 `bubble`（气泡，右对齐圆角块）；**助手回复不是气泡**，它是 markdown 正文块（`.mdBody`）。两者在本文里统称"消息"。
@@ -22,7 +32,7 @@
 ### 从 GitHub
 
 ```sh
-dsh plugin --profile web add 'github:FiVE0016/DBF-dsh-bubble-fold#v0.9.0'
+dsh plugin --profile web add 'github:FiVE0016/dsh-bubble-fold#v0.9.0'
 ```
 
 （把 `web` 换成你的 profile 名：桌面版是 `desktop`；也可以在 **设置 → 插件** 里装。）
