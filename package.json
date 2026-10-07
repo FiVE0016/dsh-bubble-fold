@@ -1,0 +1,50 @@
+{
+  "name": "dsh-bubble-fold",
+  "version": "0.9.0",
+  "description": "Fold overlong messages and work-step blocks in the DeepSeek Harness conversation: the newest turn stays open, history folds into one click. Pure client-side, display-only.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "fold",
+    "collapse",
+    "transcript"
+  ],
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "assets"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": []
+    }
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT",
+  "author": "FiVE0016",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/FiVE0016/dsh-bubble-fold.git"
+  },
+  "homepage": "https://github.com/FiVE0016/dsh-bubble-fold#readme",
+  "bugs": {
+    "url": "https://github.com/FiVE0016/dsh-bubble-fold/issues"
+  }
+}

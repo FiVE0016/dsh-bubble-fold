@@ -1,0 +1,7 @@
+# 仓库里统一存 LF：Windows 上的 checkout 也按 LF 写回，避免整文件 CRLF 抖动
+* text=auto eol=lf
+
+# 二进制，别做任何转换
+*.png binary
+*.tgz binary
+*.ico binary
