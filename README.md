@@ -22,7 +22,7 @@
 ### 从 GitHub
 
 ```sh
-dsh plugin --profile web add 'github:FiVE0016/dsh-bubble-fold#v0.9.0'
+dsh plugin --profile web add 'github:FiVE0016/DBF-dsh-bubble-fold#v0.9.0'
 ```
 
 （把 `web` 换成你的 profile 名：桌面版是 `desktop`；也可以在 **设置 → 插件** 里装。）
