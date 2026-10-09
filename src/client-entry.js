@@ -472,15 +472,33 @@ window.__ModuleLoader__.load({
               }
               return null
             }
+            /** Everything needed to tell the real frame from an inner grid. */
+            const census = () => {
+              const grids = []
+              for (const el of document.querySelectorAll('div')) {
+                let style
+                try { style = getComputedStyle(el) } catch { continue }
+                if (style.display !== 'grid') continue
+                const tracks = style.gridTemplateColumns
+                if (tracks.split(' ').length < 3) continue
+                grids.push({
+                  tracks,
+                  width: Math.round(el.getBoundingClientRect().width),
+                  dataAttrs: [...el.attributes].map((a) => a.name).filter((n) => n.startsWith('data-')).slice(0, 8),
+                  inline: (el.getAttribute('style') ?? '').slice(0, 140)
+                })
+                if (grids.length >= 5) break
+              }
+              const find = document.querySelector('[data-lf-find]')
+              return {
+                viewport: window.innerWidth,
+                storedRatio: window.__DSH_BUBBLE_FOLD__?.settings()?.rightbarRatio ?? null,
+                findPanelWidth: find ? Math.round(find.getBoundingClientRect().width) : null,
+                grids
+              }
+            }
             const frame = frameOf()
-            const read = () => ({
-              frameFound: !!frame,
-              tracks: frame ? getComputedStyle(frame).gridTemplateColumns : null,
-              viewport: window.innerWidth,
-              collapsed: frame ? frame.hasAttribute('data-rightbar-collapsed') : null,
-              fullscreen: frame ? frame.hasAttribute('data-rightbar-fullscreen') : null
-            })
-            const before = read()
+            const before = census()
             const px = Math.round(window.innerWidth * ratio / 100)
             let error = null
             try {
@@ -491,13 +509,14 @@ window.__ModuleLoader__.load({
             await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
             return {
               keys: layout ? Object.keys(layout) : null,
-              panelKeys: panels ? Object.keys(panels).slice(0, 40) : null,
               setRightbar: typeof panels?.setRightbar,
               ratio,
               px,
               error,
+              pickedFrameTracks: frame ? getComputedStyle(frame).gridTemplateColumns : null,
+              pickedFrameAttrs: frame ? [...frame.attributes].map((a) => a.name).slice(0, 8) : null,
               before,
-              after: read()
+              after: census()
             }
           },
           dispose
