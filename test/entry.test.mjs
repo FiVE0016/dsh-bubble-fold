@@ -88,8 +88,8 @@ const runEntry = (options = {}) => {
     removeEventListener: () => {}
   }
   // The entry reads the DOM for the right-bar width; an empty document is the
-  // "not measurable yet" case it must survive.
-  const fakeDocument = { defaultView: null, querySelector: () => null, body: null, documentElement: null }
+  // "not measurable yet" case it must survive. Tests that need a frame pass one in.
+  const fakeDocument = options.document ?? { defaultView: null, querySelector: () => null, body: null, documentElement: null }
   const fn = new Function('window', 'document', 'console', source)
   fn(win, fakeDocument, { warn() {}, error() {}, log() {} })
   const plugin = registration.factory((name) => (name === 'react' ? fakeReact : null))
@@ -317,6 +317,28 @@ test('the right-sidebar ratio is applied through layout.panels.setRightbar', asy
   assert.equal(calls.at(-1), Math.round(1600 * 60 / 100), '改设置立刻应用')
   assert.equal(win.__DSH_BUBBLE_FOLD__.rightbar().supported, true)
   assert.doesNotThrow(() => win.__DSH_BUBBLE_FOLD__.layoutDebug())
+})
+
+test('the right-bar width is read from the host inline grid, never guessed', async () => {
+  // The host writes `grid-template-columns` inline on the AppFrame; the third track
+  // is `minmax(0px, <rightbarMax>px)`. That number is what our setting must mirror —
+  // walking up from a child can land on an inner grid and read an unrelated width.
+  const frame = { style: { gridTemplateColumns: '280px minmax(400px, 1fr) minmax(0px, 900px)' } }
+  const document = {
+    defaultView: null,
+    querySelector: () => null,
+    querySelectorAll: (selector) => (String(selector).includes('div[style]') ? [frame] : []),
+    body: null,
+    documentElement: null
+  }
+  const { plugin, win } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36', document })
+  const ctx = {
+    slots: { inject: (_name, callback) => { callback(); return () => {} }, register: () => () => {} },
+    get: (name) => (name === 'layout' ? { panels: { setRightbar: () => {}, setViewportWidth: () => {} } } : undefined)
+  }
+  plugin.apply(ctx)
+  await tick()
+  assert.equal(win.__DSH_BUBBLE_FOLD__.rightbar().ratio, 56, '900px of a 1600px frame')
 })
 
 test('a host without panels.setRightbar degrades instead of throwing', () => {

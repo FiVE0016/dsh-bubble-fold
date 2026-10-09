@@ -3207,33 +3207,46 @@
         const viewportOf = () => view?.innerWidth || 0
         /**
          * The AppFrame is the grid owning the three columns (sidebar | conversation |
-         * right panel). Found by walking up from something that always exists — the
-         * composer seat, else any flow row — instead of by a class name or an
-         * attribute that is only present in some states.
+         * right panel). It is identified by its INLINE `grid-template-columns` — the
+         * host computes that string and writes it as a style, so it is the one element
+         * that carries it inline. Walking up from a random child instead can land on an
+         * inner grid and read a completely unrelated width, which then gets treated as
+         * the reader's own choice.
          */
         const frameOf = () => {
-          if (!doc || typeof doc.querySelector !== 'function') return null
-          let node = doc.querySelector('[data-composer-seat]') ?? doc.querySelector('[data-chat-flow-kind]') ?? doc.body
-          while (node && node !== doc.documentElement) {
+          if (!doc || typeof doc.querySelectorAll !== 'function') return null
+          for (const el of doc.querySelectorAll('div[style]')) {
             try {
-              if (view.getComputedStyle(node).display === 'grid') return node
+              if (el.style && el.style.gridTemplateColumns) return el
             } catch { /* not inspectable */ }
-            node = node.parentElement
           }
           return null
         }
-        /** Right panel width in px, read from the frame's resolved grid tracks. */
+        /**
+         * The right column's width in px. The host's own number is authoritative: the
+         * third track is written as `minmax(0px, <rightbarMax>px)`, and reading it back
+         * means our picture always matches the store's — the rendered track can be
+         * narrower than the max, which would otherwise read as a smaller ratio.
+         */
         const rightbarPx = () => {
           const frame = frameOf()
           if (!frame) return 0
-          let tracks
+          let inline = ''
           try {
-            tracks = view.getComputedStyle(frame).gridTemplateColumns
+            inline = String(frame.style.gridTemplateColumns ?? '')
+          } catch { /* ignore */ }
+          const maxima = [...inline.matchAll(/minmax\(\s*[^,]+,\s*([\d.]+)px\s*\)/g)]
+          const fromInline = maxima.length > 0 ? Number.parseFloat(maxima[maxima.length - 1][1]) : NaN
+          if (Number.isFinite(fromInline) && fromInline > 0) return fromInline
+          try {
+            const sizes = String(view.getComputedStyle(frame).gridTemplateColumns)
+              .split(' ')
+              .map((part) => Number.parseFloat(part))
+              .filter((px) => Number.isFinite(px))
+            return sizes.length >= 2 ? sizes[sizes.length - 1] : 0
           } catch {
             return 0
           }
-          const sizes = String(tracks).split(' ').map((part) => Number.parseFloat(part)).filter((px) => Number.isFinite(px))
-          return sizes.length >= 2 ? sizes[sizes.length - 1] : 0
         }
         const ratioNow = () => {
           const viewport = viewportOf()
