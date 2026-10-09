@@ -1,6 +1,15 @@
 # dsh-bubble-fold
 
+[![npm version](https://img.shields.io/npm/v/dsh-bubble-fold.svg)](https://www.npmjs.com/package/dsh-bubble-fold)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-bubble-fold.svg)](https://www.npmjs.com/package/dsh-bubble-fold)
+[![test](https://github.com/FiVE0016/dsh-bubble-fold/actions/workflows/test.yml/badge.svg)](https://github.com/FiVE0016/dsh-bubble-fold/actions/workflows/test.yml)
+[![license](https://img.shields.io/npm/l/dsh-bubble-fold.svg)](LICENSE)
+
 给 DSH 会话加一层"阅读优先"的折叠：**最新一轮永远是展开的，历史消息与工作步骤自动收起来**，想看细节点一下就回来。
+
+```sh
+dsh plugin --profile desktop add dsh-bubble-fold
+```
 
 > English — A display-only plugin for DeepSeek Harness: the newest turn always stays open, while older messages and every run of work-step rows fold into one click.
 
