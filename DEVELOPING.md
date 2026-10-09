@@ -2,6 +2,24 @@
 
 面向要改这个插件的人。**功能说明请看 [README.md](README.md)**，这里只放实现细节、兼容性、开发流程与踩过的坑。
 
+## 先读这条：启动安全（踩过一次大坑）
+
+这个插件的客户端行是 `dsh.client.immediately: true` —— **它属于启动图，`apply()` 抛错会让整个 DSH 起不来**，用户看到的是崩溃对话框：
+
+```
+web boot: 1 entry did not activate
+dsh-bubble-fold: failed
+```
+
+诊断日志：`%APPDATA%\@deepseek-ai\dsh-desktop\logs\crash-<时间>-web-boot.log`。
+
+已经踩过的两次：
+
+1. **受限 ctx 只用 `ctx.get(name)`**。属性访问未声明的服务（例如 `ctx.sidebarRightTabs`）会**直接抛错**，不是返回 `undefined`。查服务一律 `try { ctx.get(name) } catch { null }`。
+2. **`apply` 已包一层外层 try/catch**（`apply` → `plugin.applyRow`），任何异常都只降级停用插件，不再拖垮应用。别把这层删了。
+
+铁律：**改完 `src/client-entry.js` 必须先跑 `node test/entry.test.mjs` 与 `node test/runtime.test.mjs` 通过，再让用户重启**（`test/entry.test.mjs` 里有一条"敌意 ctx"用例专门守这条线）。
+
 ## 折叠控件挂在哪儿、由谁来折
 
 每条**折叠的**消息下方一个气泡胶囊键；每一段工作步骤一个折叠缝。
@@ -9,16 +27,48 @@
 | 位置 | 控件 | 作用范围 |
 |---|---|---|
 | 每条折叠的消息下方 | 气泡胶囊（`▾ 展开我的输入 · 还有 12 行` / `▾ 展开全文 · 还有 30 行`，展开后变 `▴ 收起`） | 只这一条消息 |
-| 工作步骤与后面那条回复之间 | 一条横线上的圆形气泡键（只有 ▾/▴ 图标） | 这一段里的全部工作步骤 |
+| 工作步骤与后面那条回复之间 | 一条横线上的圆形键（单箭头图标） | 这一段里的全部工作步骤 |
+| **同一轮最后一条缝**（主按钮，默认每轮只有它） | 双箭头键（`展开全部` / `收起全部`） | 这一轮的**缝**（版面）：展开全部 = 摊开各条缝、内容仍收起；收起全部 = 内容全收 + 回到只剩这一个按钮 |
+| **同一轮最后一条缝**（仅摊开时出现） | 箭头+横线键（`展开所有步骤` / `收起所有步骤`） | 这一轮**所有段的内容**，缝的数量不动 |
+
+三个控件一个几何、一层视觉：文字关掉时各自是一个 26px 圆形图标键（三个图标不同，不看文字也能区分）；文字打开时按钮本身变成胶囊、内层图标去掉边框/背景/阴影（`[data-lf-text="1"] [data-lf-icon]`），所以不会出现"胶囊里套圆圈"。
+
+"缝"是插件插入的**一条线**（`[data-lf-step-line]`：两侧细线 + 线上的控件）。线上的单箭头键（`[data-lf-step-toggle]`）管自己那一段；只有一轮的**最后一条缝**才携带主按钮（`[data-lf-step-all]`）与"所有步骤"键（`[data-lf-step-every]`）。状态是会话级的：
+
+- `mergedTurns` = 状态 0（只留一个按钮）：同步时对该轮的块强制保持折叠（宿主重渲染把开关复位也会折回），并隐藏除最后一条外的所有缝与它自己的单箭头；
+- 摊开（状态 1/2）：主按钮变成 `收起全部`，"所有步骤"键按 `info.openCount === info.count` 在 `展开所有步骤` / `收起所有步骤` 之间切换；
+- 单块轮次没有"摊开"可言：它的主按钮直接等于那一段自己的开关（文案 `展开全部` / `收起全部`，点击即开合）。
+- 点过的块记进"读者手动操作过"集合，自动折叠不会再碰它。
 
 工作步骤由谁来折，取决于宿主当前的工作详情模式 —— 两种都由同一个折叠缝驱动：
 
 | 宿主渲染方式 | 折叠缝做什么 |
 |---|---|
 | **分组模式**（工作详情 compact / standard，以及 detailed 的已结束轮） | 步骤被包在 `[data-step-process]` 容器里，容器自带标题开关。折叠缝点击宿主自己的开关（以及各轮的 `[data-turn-process]` 摘要行），状态完全归宿主，连它自己的标题箭头都同步 |
-| **内联模式**（工作详情 verbose，宿主不提供开关） | 宿主的摘要行是 `disabled`、步骤全部展开。此时折叠缝自己把这串行折起来：在这些行上打私有属性 `data-lf-step-folded` 配合 CSS 隐藏，纯显示层，插件一关或卸载，行立刻全部回来 |
+| **内联模式**（工作详情 verbose，宿主不提供开关） | 宿主的摘要行是 `disabled`、步骤全部展开。此时折叠缝自己把这串行折起来：在这些行上打私有属性 `data-lf-step-folded` **并设 `hidden="until-found"`**（纯显示层，插件一关或卸载，行立刻全部回来）。用 until-found 而不是 `display: none` 是为了让浏览器搜索够得着：命中时会触发 `beforematch`，插件据此把整段打开 |
+
+搜索（Ctrl+F）的两条路径：
+
+- **折叠的消息正文**：限高盒是 `overflow-y: auto`（滚动条隐藏）。浏览器揭示搜索结果的方式就是滚动它所在的滚动容器，所以插件在正文的 `scroll` 事件里直接把这条消息展开——`scrollTop > 0` 只可能来自"有人想读被折掉的部分"。
+- **折叠的步骤**：`hidden="until-found"` / 宿主自己的 `content-visibility: hidden` 都会被浏览器搜索命中（`display: none` 不会）。`beforematch` 处理器按块边界找到那一行所属的整段，走宿主开关或清掉插件自己的标记，并把它记入"读者手动操作过"集合，避免自动折叠立刻把它折回去。
 
 折叠缝上的箭头与提示跟随当前状态切换；**读者手动点开过的那一段不会再被自动收起**（自动折叠只在某段第一次出现时发生一次）。
+
+## 宿主设置页
+
+插件注册一个 `settings.plugins.tab` 贡献（`id: "bubble-fold", order: 20, label: "气泡折叠"`）：在 **设置 → 插件** 页与内置"全部"tab 并列。宿主只画 tab 条与外壳，页面内容由 `src/settings-panel.js` 的 React 组件（纯 `createElement`，无 JSX）绘制；组件通过注册项的 `inject: () => ({ api })` 拿到 `{ settings(), update(patch), subscribe(fn) }`，与 DOM 层控制器写通。控制器 `subscribe` 是浮层面板与设置页双向同步的通道。`apply(ctx)` 里若 `ctx.slots` 缺失（旧宿主）则整体跳过注册，折叠功能不受影响；`inject: ['slots']` 是为此新增的唯一依赖声明。面板样式在插件自己的样式表里，且**不套 `[data-dsh-bubble-fold]` 作用域**——插件被自己的开关关掉时，设置页仍要能正常显示并把它开回来。
+
+## 右侧栏「查找」
+
+查找是**右侧栏的一个 tab**（与宿主自带的"上下文""文件"同列），而不是左侧栏面板或浮动条。tab 由三处注册组成，**共用同一个 id**（`bubble-fold-find`），这正是宿主自带面板（`dsh-context`、`ui-schedule`）的形态：
+
+| 注册 | 座位 | 作用 |
+|---|---|---|
+| tab 类型 | `ctx.sidebarRightTabs.register({ id, kind: id, title })` | 让右栏知道存在这个 tab（`title` 传函数以便跟随语言） |
+| 面板体 | `slots.register({ name: 'sidebar.right.pane.tab', key: id, inject: () => ({ api }) }, Panel)` | 按 id 分派的 tab 内容 |
+| 标题 chip | `slots.register({ name: 'sidebar.right.pane.tab.title', key: id }, Title)` | tab 条上的文字 |
+
+打开方式：`ctx.get('sidebarRight').openTab(id)`（服务是 session 作用域，根作用域下可能拒绝，失败则退回 `ctx.get('layout').openRightbar(true, false)`）。`Ctrl + F` 只在 UA 含 `Electron/` 时接管——真浏览器有自己的查找栏，而折叠内容通过 until-found 已经对它可见。搜索与揭示逻辑在 DOM 层（`controller.search` / `controller.revealAt`），面板只是它的 React 外壳。
 
 ## 输入框高度
 

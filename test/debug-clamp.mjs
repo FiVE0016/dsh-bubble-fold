@@ -33,8 +33,7 @@ class E {
     const wrapper = this.parentElement
     if (this.hasAttribute('data-lf-clamped') && this.getAttribute('data-lf-open') !== '1' && wrapper) {
       const budget = Number.parseFloat(wrapper.style.values['--lf-clamp-height'])
-      const allowance = Number.parseFloat(wrapper.style.values['--lf-allowance']) || 0
-      if (Number.isFinite(budget)) height = Math.min(height, budget + allowance)
+      if (Number.isFinite(budget)) height = Math.min(height, budget)
     }
     return { top: this.rectTop, bottom: this.rectTop + height, height, width: 700 }
   }

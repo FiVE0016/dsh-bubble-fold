@@ -76,6 +76,15 @@ class FakeElement {
   // expand path in the tests.
   get hidden() { return this.hasAttribute('hidden') }
   set hidden(value) { if (value) this.setAttribute('hidden', ''); else this.removeAttribute('hidden') }
+  // Text lives as a plain property (the fixtures never model text nodes), and
+  // textContent reads the subtree the way the DOM does: children first, a leaf's
+  // own text last.
+  get textContent() {
+    const children = this.children ?? []
+    if (children.length > 0) return children.map((child) => child.textContent ?? '').join('')
+    return this._text ?? ''
+  }
+  set textContent(value) { this._text = value }
   // The DOM reflects `id` as both a property and an attribute. Keep them in sync
   // so code that assigns `.id` is exercised the way a browser would behave.
   get id() { return this.attrs.id ?? '' }
@@ -114,6 +123,7 @@ class FakeElement {
     this.isConnected = false
   }
   get firstElementChild() { return this.children[0] ?? null }
+  get lastElementChild() { return this.children[this.children.length - 1] ?? null }
   // Sibling navigation, as the real DOM reflects it. The process-block walk needs
   // these to group the step rows that sit between two message bubbles.
   get nextElementSibling() {
@@ -129,14 +139,13 @@ class FakeElement {
     return index > 0 ? siblings[index - 1] : null
   }
   getBoundingClientRect() {
-    // Clamping is driven by variables on the wrapper, and the visible budget is
-    // the line height only — the CSS lays its allowance band on top of that.
+    // Clamping is driven by the wrapper's own variable, and the visible box is
+    // exactly the line budget: the control row below is real flow, not overlay.
     let height = this.rectHeight
     const wrapper = this.parentElement
     if (this.hasAttribute('data-lf-clamped') && this.getAttribute('data-lf-open') !== '1' && wrapper) {
       const budget = Number.parseFloat(wrapper.style.values['--lf-clamp-height'])
-      const allowance = Number.parseFloat(wrapper.style.values['--lf-allowance']) || 0
-      if (Number.isFinite(budget)) height = Math.min(height, budget + allowance)
+      if (Number.isFinite(budget)) height = Math.min(height, budget)
     }
     // An inline min-height (the composer scroll area, while manually sized) is
     // part of layout, so the rect must reflect it.
@@ -156,10 +165,18 @@ class FakeElement {
     if (!this.listeners.has(type)) this.listeners.set(type, [])
     this.listeners.get(type).push(handler)
   }
+  /** Dispatch to this element's own handlers, whatever the event type. */
+  fireEvent(type, event = {}) {
+    for (const handler of this.listeners?.get(type) ?? []) {
+      handler({ target: this, currentTarget: this, ...event })
+    }
+  }
   /** Dispatch to this element's own handlers, like a real user click. */
   click() {
-    for (const handler of this.listeners?.get('click') ?? []) handler({ target: this, currentTarget: this })
+    this.fireEvent('click')
   }
+  get scrollTop() { return this.scrolledTo ?? 0 }
+  set scrollTop(value) { this.scrolledTo = value }
   getContext() { return null }
 }
 
@@ -267,6 +284,9 @@ let activeWindow = null
 
 function makeWindow(html) {
   const listeners = { document: new Map(), window: new Map() }
+  // Clipboard writes are captured synchronously — the plugin calls writeText
+  // during the click — so a synchronous test can assert what was copied.
+  const copied = []
   const record = (bag, type, handler) => {
     if (!bag.has(type)) bag.set(type, [])
     bag.get(type).push(handler)
@@ -289,6 +309,15 @@ function makeWindow(html) {
   }
   return {
     document: doc,
+    copied,
+    navigator: {
+      clipboard: {
+        writeText(text) {
+          copied.push(String(text))
+          return Promise.resolve()
+        }
+      }
+    },
     listeners,
     innerHeight: 800,
     performance: { now: () => Date.now() },
@@ -413,21 +442,76 @@ console.log('wrapping')
     assert.equal(long.anchor.querySelectorAll('[data-lf-toggle]').length, 1)
     assert.equal(short.anchor.querySelectorAll('[data-lf-toggle]').length, 1)
   })
-  test('the line budget and the fade allowance are separate variables', () => {
+  test('the clamp box is the line budget and the gap lives on the control row', () => {
     const wrapper = long.bubble.parentElement
-    // 6 lines * 22px of visible text; the 34px fade band is added by the CSS.
+    // 6 lines * 22px of visible text, and nothing else inside the box.
     assert.equal(wrapper.style.values['--lf-clamp-height'], '132px')
-    assert.equal(wrapper.style.values['--lf-allowance'], '34px')
+    // The gap belongs to the control row, which sits below the message in flow.
+    const tail = long.anchor.querySelector('[data-lf-tail="user"]')
+    assert.equal(tail.style.values['--lf-gap'], '8px')
+  })
+  test('the control row cannot sit on the message it folds', () => {
+    // Real flow: the row starts at or below the bottom of the clamped box.
+    const tail = long.anchor.querySelector('[data-lf-tail="user"]')
+    assert.equal(tail.parentElement, long.anchor, 'the row is a sibling of the message, not an overlay')
+    assert.equal(tail.hasAttribute('data-lf-float'), false, 'nothing is positioned over the bubble')
   })
   test('labels the affordance with what is hidden', () => {
     const toggle = long.anchor.querySelector('[data-lf-toggle]')
-    // 600px of content inside a 166px box (132px of lines + the 34px band).
-    assert.match(toggle.querySelector('[data-lf-label]').textContent, /展开我的输入 · 还有 20 行/)
+    // 600px of content inside a 132px box of six lines.
+    assert.match(toggle.querySelector('[data-lf-label]').textContent, /展开我的输入 · 还有 21 行/)
   })
   test('clamping is reversible', () => {
     controller.dispose()
     assert.equal(long.bubble.getAttribute('data-lf-clamped'), null)
     assert.equal(long.anchor.querySelectorAll('[data-lf-toggle]').length, 0)
+  })
+}
+
+console.log('folding on a paragraph boundary')
+{
+  const fixture = buildFixture()
+  const mine = fixture.user({}, 200)
+  // Four 50px blocks. The line budget is 6 * 22 = 132px, which would slice the
+  // third block through the middle — the fold has to land on the 100px boundary
+  // the blocks actually end on, with no fade needed to hide a cut line.
+  for (const [index, height] of [50, 50, 50, 50].entries()) {
+    const block = mine.bubble.appendChild(new FakeElement('div'))
+    block.rectHeight = height
+    block.rectTop = index * height
+  }
+  await boot(fixture)
+
+  test('the clamp box lands on a block boundary, not mid-block', () => {
+    assert.equal(mine.bubble.getAttribute('data-lf-clamped'), '1')
+    assert.equal(mine.bubble.parentElement.style.values['--lf-clamp-height'], '100px')
+  })
+  test('the control row still sits clear of the message', () => {
+    const tail = mine.anchor.querySelector('[data-lf-tail="user"]')
+    assert.equal(tail.style.values['--lf-gap'], '8px')
+    assert.equal(tail.hidden, false)
+  })
+}
+
+console.log('folding through a single wrapper')
+{
+  const fixture = buildFixture()
+  const mine = fixture.user({}, 200)
+  // A message body is often ONE container around the real paragraphs, so the
+  // boundary search has to descend into it: same four 50px blocks, one level in.
+  const wrapper = mine.bubble.appendChild(new FakeElement('div'))
+  wrapper.rectHeight = 200
+  wrapper.rectTop = 0
+  for (const [index, height] of [50, 50, 50, 50].entries()) {
+    const block = wrapper.appendChild(new FakeElement('div'))
+    block.rectHeight = height
+    block.rectTop = index * height
+  }
+  await boot(fixture)
+
+  test('a wrapped body still folds on the inner boundary', () => {
+    assert.equal(mine.bubble.getAttribute('data-lf-clamped'), '1')
+    assert.equal(mine.bubble.parentElement.style.values['--lf-clamp-height'], '100px')
   })
 }
 
@@ -446,9 +530,9 @@ console.log('assistant side')
     assert.equal(streaming.markdown.getAttribute('data-lf-clamped'), null)
   })
   test('uses the assistant line budget', () => {
-    // 10 lines * 22px; the fade band is tracked separately.
+    // 10 lines * 22px, and the gap is tracked on the control row instead.
     assert.equal(reply.markdown.parentElement.style.values['--lf-clamp-height'], '220px')
-    assert.equal(reply.markdown.parentElement.style.values['--lf-allowance'], '34px')
+    assert.equal(reply.anchor.querySelector('[data-lf-tail="assistant"]').style.values['--lf-gap'], '8px')
   })
 }
 
@@ -549,11 +633,22 @@ console.log('interaction')
     assert.equal(mine.bubble.getAttribute('data-lf-open'), '0')
     assert.match(toggle.querySelector('[data-lf-label]').textContent, /展开我的输入/)
   })
-  test('a message row holds exactly ONE control: its own toggle', () => {
+  test('a message row holds its own toggle plus the copy control', () => {
     const row = mine.anchor.querySelector('[data-lf-tail="user"]')
-    assert.equal(row.children.length, 1, 'no bulk buttons ride along')
+    assert.equal(row.children.length, 2, 'no bulk buttons ride along')
     assert.equal(row.firstElementChild.getAttribute('data-lf-toggle'), '1')
+    assert.equal(row.lastElementChild.getAttribute('data-lf-copy'), '1', 'copy sits beside the toggle')
+    assert.ok(row.querySelector('[data-lf-copy]').getAttribute('aria-label'), 'the copy control names itself')
     assert.equal(row.querySelector('[data-lf-group]'), null, 'no group buttons anywhere')
+  })
+  test('copy hands the whole message over without touching the fold state', () => {
+    // The clamp is CSS only, so the text is still there to read back.
+    mine.bubble.textContent = '被折起来的正文'
+    const before = mine.bubble.getAttribute('data-lf-open')
+    fire(win, 'document', 'click', { target: mine.anchor.querySelector('[data-lf-copy]') })
+    assert.equal(mine.bubble.getAttribute('data-lf-open'), before, 'the clamp state is untouched')
+    assert.equal(win.copied.length, 1, 'one clipboard write per click')
+    assert.match(win.copied[0], /被折起来的正文/)
   })
   test('toggling one bubble leaves the other one alone', () => {
     const toggle = mine.anchor.querySelector('[data-lf-toggle]')
@@ -716,23 +811,29 @@ console.log('work-step (host-owned) folding')
   // and the default policy itself is covered further down.
   const { win, controller } = await boot(fixture, null, { foldAllSteps: false })
 
-  const seamOf = (answer) => answer.previousElementSibling
+  // A seam is a line: the hairline container the plugin inserts above the reply,
+  // with the block's own bubble toggle on it (and, on a Turn's last seam, the
+  // Turn-wide control beside that bubble).
+  const lineOf = (answer) => answer.previousElementSibling
+  const seamOf = (answer) => lineOf(answer).querySelector('[data-lf-step-toggle]')
   const seams = () => fixture.scroll.querySelectorAll('[data-lf-step-toggle]')
 
   test('one seam per block, placed between the steps and the reply', () => {
     assert.equal(seams().length, 5, 'every block that can be folded gets exactly one seam')
+    const line = lineOf(third.answer)
     const seam = seamOf(third.answer)
-    assert.equal(seam.hasAttribute('data-lf-step-toggle'), true)
-    assert.equal(seam.nextElementSibling, third.answer, 'sits immediately above the reply')
-    assert.equal(seam.previousElementSibling, third.steps[third.steps.length - 1], 'and after the last step row')
+    assert.equal(line.hasAttribute('data-lf-step-line'), true)
+    assert.equal(line.nextElementSibling, third.answer, 'sits immediately above the reply')
+    assert.equal(line.previousElementSibling, third.steps[third.steps.length - 1], 'and after the last step row')
     assert.equal(seam.querySelector('[data-lf-label]'), null, 'icon-only bubble, no text pill')
-    assert.equal(seam.querySelector('[data-lf-bubble]').getAttribute('data-lf-bubble'), '1')
+    assert.match(seam.querySelector('[data-lf-icon]').innerHTML, /<svg/, 'the icon holder carries the glyph')
   })
   test('a run of steps spanning several turns folds as one block', () => {
+    const line = lineOf(second.answer)
     const seam = seamOf(second.answer)
-    assert.equal(seam.nextElementSibling, second.answer)
-    assert.equal(seam.previousElementSibling, second.steps[second.steps.length - 1], 'covers both turns')
-    assert.equal(seam.getAttribute('aria-label'), '收起步骤', 'both turns are open')
+    assert.equal(line.nextElementSibling, second.answer)
+    assert.equal(line.previousElementSibling, second.steps[second.steps.length - 1], 'covers both turns')
+    assert.equal(seam.getAttribute('aria-label'), '收起本步骤', 'both turns are open')
     assert.equal(seam.getAttribute('data-lf-step-open'), '1')
   })
   test('the seam folds every host control the block covers', () => {
@@ -748,7 +849,7 @@ console.log('work-step (host-owned) folding')
   test('its state follows the host on the next scan', () => {
     controller.rescan()
     const seam = seamOf(second.answer)
-    assert.equal(seam.getAttribute('aria-label'), '展开步骤', 'now closed, so it offers to open')
+    assert.equal(seam.getAttribute('aria-label'), '展开本步骤', 'now closed, so it offers to open')
     assert.equal(seam.getAttribute('data-lf-step-open'), '0')
     fire(win, 'document', 'click', { target: seam })
     assert.equal(first.control.hasAttribute('data-open'), true, 'one click reopens the whole run')
@@ -757,7 +858,7 @@ console.log('work-step (host-owned) folding')
   test('a collapsed turn still gets a seam: that is how it reopens', () => {
     const seam = seamOf(third.answer)
     assert.ok(seam, 'seam exists while the steps are hidden')
-    assert.equal(seam.getAttribute('aria-label'), '展开步骤')
+    assert.equal(seam.getAttribute('aria-label'), '展开本步骤')
     assert.equal(third.steps[0].getAttribute('hidden'), 'until-found', 'the host hides the rows, not us')
     fire(win, 'document', 'click', { target: seam })
     assert.equal(third.control.hasAttribute('data-open'), true)
@@ -766,12 +867,12 @@ console.log('work-step (host-owned) folding')
     const seam = seamOf(stale.answer)
     assert.ok(seam, 'the seam exists even though the host control is dead')
     assert.equal(stale.summary.hasAttribute('data-lf-step-folded'), false, 'nothing hidden yet')
-    assert.equal(seam.getAttribute('aria-label'), '收起步骤', 'the rows are visible, so it offers to fold them')
+    assert.equal(seam.getAttribute('aria-label'), '收起本步骤', 'the rows are visible, so it offers to fold them')
     fire(win, 'document', 'click', { target: seam })
     assert.equal(stale.summary.getAttribute('data-lf-step-folded'), '1', 'the summary row is folded')
     assert.equal(stale.steps[0].getAttribute('data-lf-step-folded'), '1', 'and so are its step rows')
     assert.equal(stale.nativeClicks.length, 0, 'the disabled host control was never clicked')
-    assert.equal(seam.getAttribute('aria-label'), '展开步骤')
+    assert.equal(seam.getAttribute('aria-label'), '展开本步骤')
     assert.match(seam.getAttribute('title'), /2 步/)
     fire(win, 'document', 'click', { target: seam })
     assert.equal(stale.summary.hasAttribute('data-lf-step-folded'), false, 'one click brings it back')
@@ -780,14 +881,14 @@ console.log('work-step (host-owned) folding')
   test('a grouped step container is folded through its own header', () => {
     const seam = seamOf(grouped.answer)
     assert.ok(seam, 'the container is treated as one block')
-    assert.equal(seam.previousElementSibling, grouped.container, 'the seam sits below the whole container')
-    assert.equal(seam.getAttribute('aria-label'), '收起步骤', 'the group header says open')
+    assert.equal(lineOf(grouped.answer).previousElementSibling, grouped.container, 'the seam sits below the whole container')
+    assert.equal(seam.getAttribute('aria-label'), '收起本步骤', 'the group header says open')
     fire(win, 'document', 'click', { target: seam })
     assert.equal(grouped.groupClicks.length, 1, 'the group header was clicked')
     assert.equal(grouped.header.getAttribute('aria-expanded'), 'false')
     assert.equal(grouped.steps[0].getAttribute('hidden'), 'until-found', 'the host hides its own members')
     controller.rescan()
-    assert.equal(seam.getAttribute('aria-label'), '展开步骤')
+    assert.equal(seam.getAttribute('aria-label'), '展开本步骤')
     fire(win, 'document', 'click', { target: seam })
     assert.equal(grouped.header.getAttribute('aria-expanded'), 'true', 'one click reopens the group')
   })
@@ -799,7 +900,7 @@ console.log('work-step (host-owned) folding')
     // Hiding the container hides the rows nested inside it; no per-row write.
     assert.equal(inline.container.getAttribute('data-lf-step-folded'), '1')
     assert.equal(inline.steps[1].closest('[data-step-process]'), inline.container, 'the rows live inside that container')
-    assert.equal(seam.getAttribute('aria-label'), '展开步骤')
+    assert.equal(seam.getAttribute('aria-label'), '展开本步骤')
     fire(win, 'document', 'click', { target: seam })
     assert.equal(inline.container.hasAttribute('data-lf-step-folded'), false)
   })
@@ -810,19 +911,388 @@ console.log('work-step (host-owned) folding')
     assert.equal(lastStep.nextElementSibling, null, 'nothing injected after the last step')
   })
   test('the seam is remade when the host re-renders it away', () => {
-    const seam = seamOf(third.answer)
-    seam.remove()
+    const line = lineOf(third.answer)
+    line.remove()
     controller.rescan()
     assert.ok(seamOf(third.answer))
   })
   test('disabling workStepButtons removes every seam and every fold mark', () => {
     // Fold one block first so there is a mark to clean up.
     const seam = seamOf(stale.answer)
-    if (seam.getAttribute('aria-label') === '收起步骤') fire(win, 'document', 'click', { target: seam })
+    if (seam.getAttribute('aria-label') === '收起本步骤') fire(win, 'document', 'click', { target: seam })
     assert.equal(stale.steps[0].getAttribute('data-lf-step-folded'), '1')
     controller.update({ workStepButtons: false })
     assert.equal(seams().length, 0)
     assert.equal(fixture.scroll.querySelectorAll('[data-lf-step-folded]').length, 0, 'no row stays hidden')
+  })
+  test('a print pass unfolds the rows the plugin hides itself, then puts them back', () => {
+    // The previous case turned the seams off; this one needs them back.
+    controller.update({ workStepButtons: true })
+    const seam = seamOf(stale.answer)
+    assert.ok(seam, 'the seam is back with the setting')
+    if (seam.getAttribute('aria-label') === '收起本步骤') fire(win, 'document', 'click', { target: seam })
+    assert.equal(stale.summary.getAttribute('data-lf-step-folded'), '1', 'folded before printing')
+    fire(win, 'window', 'beforeprint', {})
+    assert.equal(stale.summary.hasAttribute('data-lf-step-folded'), false, 'the print pass reveals them')
+    assert.equal(stale.steps[0].hasAttribute('data-lf-step-folded'), false)
+    fire(win, 'window', 'afterprint', {})
+    assert.equal(stale.summary.getAttribute('data-lf-step-folded'), '1', 'the fold returns after printing')
+    assert.equal(stale.steps[0].getAttribute('data-lf-step-folded'), '1')
+  })
+}
+
+console.log('the three seam controls of a Turn')
+{
+  const fixture = buildFixture()
+  const TURN = '9'
+  const OTHER = '10'
+  const mkBlock = (turn, key, { open = true } = {}) => {
+    const summary = fixture.scroll.appendChild(new FakeElement('div', {
+      'data-chat-flow-kind': 'turn-process',
+      'data-chat-turn': turn,
+      'data-chat-anchor-key': `turn-process:${key}`
+    }))
+    const control = summary.appendChild(new FakeElement('button', { 'data-turn-process': turn }))
+    control.setAttribute('aria-expanded', String(open))
+    if (open) control.setAttribute('data-open', '1')
+    const steps = []
+    const setHidden = (hidden) => {
+      for (const step of steps) {
+        if (hidden) step.setAttribute('hidden', 'until-found')
+        else step.removeAttribute('hidden')
+      }
+    }
+    const nativeClicks = []
+    control.addEventListener('click', () => {
+      if (control.disabled) return
+      nativeClicks.push(control.hasAttribute('data-open'))
+      if (control.hasAttribute('data-open')) control.removeAttribute('data-open')
+      else control.setAttribute('data-open', '1')
+      setHidden(!control.hasAttribute('data-open'))
+    })
+    steps.push(fixture.scroll.appendChild(new FakeElement('div', {
+      'data-chat-flow-kind': 'tool-call',
+      'data-turn-process-member': 'true',
+      'data-chat-turn': turn,
+      'data-chat-anchor-key': `member:${key}`
+    })))
+    if (!open) setHidden(true)
+    const answer = fixture.scroll.appendChild(new FakeElement('div', {
+      'data-chat-flow-kind': 'assistant-step',
+      'data-chat-turn': turn,
+      'data-chat-anchor-key': `answer:${key}`
+    }))
+    return { summary, control, steps, answer, nativeClicks }
+  }
+
+  // One Turn interleaving three step runs with three replies (all folded, the way
+  // the default policy leaves them), plus a neighbour Turn holding a single block.
+  const a = mkBlock(TURN, 'a', { open: false })
+  const b = mkBlock(TURN, 'b', { open: false })
+  const c = mkBlock(TURN, 'c', { open: false })
+  const solo = mkBlock(OTHER, 'solo', { open: false })
+
+  const { win, controller } = await boot(fixture, null, { foldAllSteps: false, mergeByDefault: false })
+
+  const lineOf = (answer) => answer.previousElementSibling
+  const buttonOf = (answer, attribute) => lineOf(answer).querySelector(`[${attribute}]`)
+  const visibleLines = () => [...fixture.scroll.querySelectorAll('[data-lf-step-line]')].filter((line) => !line.hidden)
+  const openFlags = () => [a, b, c].map((block) => block.control.hasAttribute('data-open'))
+
+  test('every Turn carries 收起全部 on its last seam while spread', () => {
+    assert.equal(fixture.scroll.querySelectorAll('[data-lf-step-line]').length, 4, 'one seam per block')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-all').hidden, false)
+    assert.equal(buttonOf(c.answer, 'data-lf-step-all').getAttribute('aria-label'), '收起全部')
+    assert.equal(buttonOf(solo.answer, 'data-lf-step-all').hidden, false, 'a single-block Turn has one too')
+  })
+  test('展开所有步骤 exists only while spread and with more than one block', () => {
+    assert.equal(buttonOf(c.answer, 'data-lf-step-every').hidden, false, 'the three-block Turn carries it')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-every').getAttribute('aria-label'), '展开所有步骤')
+    assert.equal(buttonOf(a.answer, 'data-lf-step-every').hidden, true, 'it rides the last seam only')
+    assert.equal(buttonOf(solo.answer, 'data-lf-step-every').hidden, true, 'one block has no separate "all steps"')
+  })
+  test('收起全部 folds every block of that Turn and leaves one button', () => {
+    const soloBefore = solo.control.hasAttribute('data-open')
+    fire(win, 'document', 'click', { target: buttonOf(c.answer, 'data-lf-step-all') })
+    controller.rescan()
+    assert.deepEqual(openFlags(), [false, false, false], 'every block folded')
+    assert.equal(visibleLines().length, 2, 'the Turn keeps only its last seam')
+    assert.equal(lineOf(c.answer).hidden, false)
+    assert.equal(buttonOf(c.answer, 'data-lf-step-toggle').hidden, true, 'state 0 shows exactly one button')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-every').hidden, true)
+    assert.equal(buttonOf(c.answer, 'data-lf-step-all').getAttribute('aria-label'), '展开全部')
+    assert.equal(solo.control.hasAttribute('data-open'), soloBefore, 'the other Turn is untouched')
+  })
+  test('展开全部 brings the seams back with the contents still folded', () => {
+    fire(win, 'document', 'click', { target: buttonOf(c.answer, 'data-lf-step-all') })
+    controller.rescan()
+    assert.equal(visibleLines().length, 4, 'all four seams are visible again')
+    assert.deepEqual(openFlags(), [false, false, false], 'contents stay folded')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-all').getAttribute('aria-label'), '收起全部')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-every').getAttribute('aria-label'), '展开所有步骤')
+  })
+  test('展开所有步骤 opens every block; 收起所有步骤 folds them back', () => {
+    fire(win, 'document', 'click', { target: buttonOf(c.answer, 'data-lf-step-every') })
+    controller.rescan()
+    assert.deepEqual(openFlags(), [true, true, true], 'every block open')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-every').getAttribute('aria-label'), '收起所有步骤')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-all').getAttribute('aria-label'), '收起全部', 'still spread')
+    fire(win, 'document', 'click', { target: buttonOf(c.answer, 'data-lf-step-every') })
+    controller.rescan()
+    assert.deepEqual(openFlags(), [false, false, false], 'folded again')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-every').getAttribute('aria-label'), '展开所有步骤')
+    assert.equal(visibleLines().length, 4, 'the seams were never touched')
+  })
+  test('展开本步骤 opens only its own block', () => {
+    fire(win, 'document', 'click', { target: buttonOf(b.answer, 'data-lf-step-toggle') })
+    controller.rescan()
+    assert.deepEqual(openFlags(), [false, true, false], 'only the middle block')
+    assert.equal(buttonOf(b.answer, 'data-lf-step-toggle').getAttribute('aria-label'), '收起本步骤')
+  })
+  test('收起全部 from a fully expanded Turn goes straight back to one button', () => {
+    fire(win, 'document', 'click', { target: buttonOf(c.answer, 'data-lf-step-every') })
+    controller.rescan()
+    assert.deepEqual(openFlags(), [true, true, true], 'all open again')
+    fire(win, 'document', 'click', { target: buttonOf(c.answer, 'data-lf-step-all') })
+    controller.rescan()
+    assert.deepEqual(openFlags(), [false, false, false], 'contents fold on the way out')
+    assert.equal(visibleLines().length, 2, 'and the seams go with them')
+    assert.equal(buttonOf(c.answer, 'data-lf-step-all').getAttribute('aria-label'), '展开全部')
+  })
+  test('the three controls carry three different glyphs', () => {
+    const icons = ['data-lf-step-toggle', 'data-lf-step-all', 'data-lf-step-every']
+      .map((attribute) => buttonOf(c.answer, attribute).querySelector('[data-lf-icon]')?.innerHTML ?? '')
+    assert.equal(new Set(icons).size, 3, 'no two controls share an icon')
+    for (const icon of icons) assert.match(icon, /<svg/, 'each control has its own svg')
+  })
+}
+
+console.log('default: each Turn shows one button until asked')
+{
+  const fixture = buildFixture()
+  const TURN = '7'
+  const mk = (turn, key) => {
+    const summary = fixture.scroll.appendChild(new FakeElement('div', {
+      'data-chat-flow-kind': 'turn-process',
+      'data-chat-turn': turn,
+      'data-chat-anchor-key': `turn-process:${key}`
+    }))
+    const control = summary.appendChild(new FakeElement('button', { 'data-turn-process': turn }))
+    control.setAttribute('aria-expanded', 'true')
+    control.setAttribute('data-open', '1')
+    const clicks = []
+    control.addEventListener('click', () => {
+      clicks.push(control.hasAttribute('data-open'))
+      if (control.hasAttribute('data-open')) control.removeAttribute('data-open')
+      else control.setAttribute('data-open', '1')
+    })
+    fixture.scroll.appendChild(new FakeElement('div', {
+      'data-chat-flow-kind': 'tool-call',
+      'data-turn-process-member': 'true',
+      'data-chat-turn': turn,
+      'data-chat-anchor-key': `member:${key}`
+    }))
+    const answer = fixture.scroll.appendChild(new FakeElement('div', {
+      'data-chat-flow-kind': 'assistant-step',
+      'data-chat-turn': turn,
+      'data-chat-anchor-key': `answer:${key}`
+    }))
+    return { control, answer, clicks }
+  }
+  const a = mk(TURN, 'a')
+  const b = mk(TURN, 'b')
+  const solo = mk('8', 'solo')
+  const { win, controller } = await boot(fixture)
+  const visibleLines = () => [...fixture.scroll.querySelectorAll('[data-lf-step-line]')].filter((line) => !line.hidden)
+  const lineOf = (answer) => answer.previousElementSibling
+  const buttonOf = (answer, attribute) => lineOf(answer).querySelector(`[${attribute}]`)
+
+  test('a fresh Turn boots with exactly one button', () => {
+    assert.equal(visibleLines().length, 2, 'one seam per Turn')
+    assert.equal(buttonOf(b.answer, 'data-lf-step-all').getAttribute('aria-label'), '展开全部')
+    assert.equal(buttonOf(b.answer, 'data-lf-step-toggle').hidden, true, 'its own arrow waits')
+    assert.equal(buttonOf(b.answer, 'data-lf-step-every').hidden, true)
+    assert.equal(a.control.hasAttribute('data-open'), false)
+    assert.equal(b.control.hasAttribute('data-open'), false)
+  })
+  test('展开全部 spreads the seams and keeps every block folded', () => {
+    fire(win, 'document', 'click', { target: buttonOf(b.answer, 'data-lf-step-all') })
+    controller.rescan()
+    assert.equal(visibleLines().length, 3, 'both seams of that Turn plus the single-block Turn')
+    assert.equal(a.control.hasAttribute('data-open'), false, 'contents stay folded')
+    assert.equal(b.control.hasAttribute('data-open'), false, 'contents stay folded')
+    assert.equal(buttonOf(b.answer, 'data-lf-step-toggle').hidden, false, 'the per-seam arrow is back')
+    assert.equal(buttonOf(b.answer, 'data-lf-step-all').getAttribute('aria-label'), '收起全部')
+    controller.rescan()
+    assert.equal(visibleLines().length, 3, 'the explicit spread sticks')
+  })
+  test('one setting decides the text of all three controls', () => {
+    controller.update({ stepLabels: true })
+    assert.equal(buttonOf(b.answer, 'data-lf-step-label').textContent, '展开本步骤')
+    assert.equal(buttonOf(b.answer, 'data-lf-all-label').textContent, '收起全部')
+    assert.equal(buttonOf(b.answer, 'data-lf-every-label').textContent, '展开所有步骤')
+    for (const attribute of ['data-lf-step-toggle', 'data-lf-step-all', 'data-lf-step-every']) {
+      assert.equal(buttonOf(b.answer, attribute).getAttribute('data-lf-text'), '1', 'text mode on')
+    }
+    controller.update({ stepLabels: false })
+    for (const attribute of ['data-lf-step-toggle', 'data-lf-step-all', 'data-lf-step-every']) {
+      assert.equal(buttonOf(b.answer, attribute).hasAttribute('data-lf-text'), false, 'icon-only again')
+    }
+  })
+  test('a single-block Turn has nothing to spread: 展开全部 opens it', () => {
+    const primary = buttonOf(solo.answer, 'data-lf-step-all')
+    assert.equal(primary.getAttribute('aria-label'), '展开全部')
+    fire(win, 'document', 'click', { target: primary })
+    controller.rescan()
+    assert.equal(solo.control.hasAttribute('data-open'), true, 'its one block opened')
+    assert.equal(primary.getAttribute('aria-label'), '收起全部')
+  })
+}
+
+console.log('sidebar find: search and reveal')
+{
+  const fixture = buildFixture()
+  // A long message that folds, with text the fold hides from view but not from
+  // the DOM — the search must still reach it.
+  const mine = fixture.user({}, 600)
+  mine.bubble.textContent = '折叠起来的一句话 alpha-beta 关键词'
+  // A block the host will not fold: its rows carry findable text too.
+  const summary = fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'turn-process',
+    'data-chat-turn': '6',
+    'data-chat-anchor-key': 'turn-process:6'
+  }))
+  const control = summary.appendChild(new FakeElement('button', { 'data-turn-process': '6' }))
+  control.disabled = true
+  const row = fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'tool-call',
+    'data-turn-process-member': 'true',
+    'data-chat-turn': '6',
+    'data-chat-anchor-key': 'member:6'
+  }))
+  row.textContent = '藏在步骤里的 关键词'
+  fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'assistant-step',
+    'data-chat-turn': '6',
+    'data-chat-anchor-key': 'answer:6'
+  }))
+
+  const { controller } = await boot(fixture, null, { mergeByDefault: false })
+
+  test('search reaches text inside a folded message and a folded step', () => {
+    assert.equal(mine.bubble.getAttribute('data-lf-clamped'), '1', 'the message is folded')
+    const hits = controller.search('关键词')
+    assert.equal(hits.length, 2, 'one in the folded message, one in the folded step')
+  })
+  test('revealAt opens the folded message', () => {
+    const hit = controller.search('alpha-beta').find((entry) => entry.kind === 'message')
+    assert.ok(hit, 'the hit exists')
+    controller.revealAt(hit.element)
+    assert.equal(mine.bubble.getAttribute('data-lf-open'), '1', 'the message unfolds')
+  })
+  test('revealAt opens the whole folded step block', () => {
+    const hit = controller.search('藏在步骤里的').find((entry) => entry.kind === 'step')
+    assert.ok(hit, 'the hit exists')
+    assert.equal(row.getAttribute('data-lf-step-folded'), '1', 'folded before')
+    controller.revealAt(hit.element)
+    assert.equal(row.hasAttribute('data-lf-step-folded'), false, 'the block opens through its own path')
+  })
+}
+
+console.log('Ctrl+F reaches folded content')
+{
+  const fixture = buildFixture()
+
+  // A block the host refuses to fold: the plugin hides those rows itself.
+  const summary = fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'turn-process',
+    'data-chat-turn': '4',
+    'data-chat-anchor-key': 'turn-process:4'
+  }))
+  const control = summary.appendChild(new FakeElement('button', { 'data-turn-process': '4' }))
+  control.disabled = true
+  const rows = [0, 1].map((index) => fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'tool-call',
+    'data-turn-process-member': 'true',
+    'data-chat-turn': '4',
+    'data-chat-anchor-key': `member:4:${index}`
+  })))
+  fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'assistant-step',
+    'data-chat-turn': '4',
+    'data-chat-anchor-key': 'answer:4'
+  }))
+
+  // A block the host folds itself, with the same until-found mechanism.
+  const hostSummary = fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'turn-process',
+    'data-chat-turn': '5',
+    'data-chat-anchor-key': 'turn-process:5'
+  }))
+  const hostControl = hostSummary.appendChild(new FakeElement('button', { 'data-turn-process': '5' }))
+  hostControl.setAttribute('aria-expanded', 'false')
+  const hostRows = [0, 1].map((index) => fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'tool-call',
+    'data-turn-process-member': 'true',
+    'data-chat-turn': '5',
+    'data-chat-anchor-key': `member:5:${index}`,
+    hidden: 'until-found'
+  })))
+  hostControl.addEventListener('click', () => {
+    const open = hostControl.getAttribute('aria-expanded') !== 'true'
+    hostControl.setAttribute('aria-expanded', String(open))
+    for (const row of hostRows) {
+      if (open) row.removeAttribute('hidden')
+      else row.setAttribute('hidden', 'until-found')
+    }
+  })
+  fixture.scroll.appendChild(new FakeElement('div', {
+    'data-chat-flow-kind': 'assistant-step',
+    'data-chat-turn': '5',
+    'data-chat-anchor-key': 'answer:5'
+  }))
+
+  // A folded message: the browser reveals a match inside it by scrolling the box.
+  const long = fixture.user({ 'data-chat-anchor-key': 'user:9' }, 600)
+
+  const { win, controller } = await boot(fixture)
+
+  test('rows the plugin folds are hidden until found, not removed', () => {
+    assert.equal(rows[0].getAttribute('data-lf-step-folded'), '1')
+    assert.equal(rows[0].getAttribute('hidden'), 'until-found', 'the browser can still match this text')
+    assert.equal(rows[1].getAttribute('hidden'), 'until-found')
+  })
+  test('the browser revealing one row opens the whole block', () => {
+    fire(win, 'document', 'beforematch', { target: rows[0] })
+    for (const row of rows) {
+      assert.equal(row.hasAttribute('hidden'), false, 'every row of the block comes back')
+      assert.equal(row.hasAttribute('data-lf-step-folded'), false)
+    }
+    controller.rescan()
+    assert.equal(rows[0].hasAttribute('hidden'), false, 'and the automatic pass leaves it open')
+  })
+  test('a host-folded block is opened through the host control', () => {
+    fire(win, 'document', 'beforematch', { target: hostRows[0] })
+    assert.equal(hostControl.getAttribute('aria-expanded'), 'true', 'the host was told to open')
+    assert.equal(hostRows[0].hasAttribute('hidden'), false)
+  })
+  test('a match inside a folded message opens it instead of leaving it clipped', () => {
+    assert.equal(long.bubble.getAttribute('data-lf-clamped'), '1')
+    assert.equal(long.bubble.getAttribute('data-lf-open'), '0')
+    // The find panel reveals its hits itself — and a passing wheel must NOT,
+    // which is why the clamp box is clipped rather than scrollable.
+    long.bubble.scrollTop = 120
+    long.bubble.fireEvent('scroll')
+    assert.equal(long.bubble.getAttribute('data-lf-open'), '0', 'a scroll alone expands nothing')
+    controller.revealAt(long.bubble)
+    assert.equal(long.bubble.getAttribute('data-lf-open'), '1', 'the message unfolds')
+    assert.match(long.anchor.querySelector('[data-lf-label]').textContent, /收起/)
+  })
+  test('revealed blocks are remembered, so nothing folds them back', () => {
+    controller.rescan()
+    controller.rescan()
+    assert.equal(rows[0].hasAttribute('hidden'), false)
+    assert.equal(long.bubble.hasAttribute('data-lf-open'), true)
   })
 }
 
@@ -870,7 +1340,7 @@ console.log('default fold policy (newest turn open, everything else folded)')
   const newerSteps = block(2, { collapsible: true, open: true, members: 3 })
   const newerReply = fixture.assistant({ 'data-chat-turn': '2', 'data-chat-anchor-key': 'a:2' }, 900)
 
-  const { win, controller } = await boot(fixture)
+  const { win, controller } = await boot(fixture, null, { mergeByDefault: false })
   let nextUser = null
 
   test('the newest turn stays open however long it is', () => {
@@ -890,15 +1360,15 @@ console.log('default fold policy (newest turn open, everything else folded)')
     assert.equal(olderSelfSteps.summary.getAttribute('data-lf-step-folded'), '1', 'a block the host will not fold is marked by us')
     assert.equal(olderSelfSteps.steps[0].getAttribute('data-lf-step-folded'), '1')
     for (const seam of fixture.scroll.querySelectorAll('[data-lf-step-toggle]')) {
-      assert.equal(seam.getAttribute('aria-label'), '展开步骤')
+      assert.equal(seam.getAttribute('aria-label'), '展开本步骤')
     }
   })
   test('opening a block by hand sticks', () => {
-    const seam = newerReply.anchor.previousElementSibling
+    const seam = newerReply.anchor.previousElementSibling.querySelector('[data-lf-step-toggle]')
     assert.equal(seam.hasAttribute('data-lf-step-toggle'), true)
     fire(win, 'document', 'click', { target: seam })
     assert.equal(newerSteps.control.hasAttribute('data-open'), true, 'the newest turn opens on one click')
-    assert.equal(seam.getAttribute('aria-label'), '收起步骤')
+    assert.equal(seam.getAttribute('aria-label'), '收起本步骤')
     controller.rescan()
     controller.rescan()
     assert.equal(newerSteps.control.hasAttribute('data-open'), true, 'and nothing re-collapses it')
@@ -999,13 +1469,20 @@ console.log('bundled artifact (client.js)')
         })
         assert.deepEqual(hostRequests, ['react'], 'the host resolver must be asked for react only')
         assert.equal(typeof plugin.apply, 'function')
-        assert.deepEqual(plugin.inject, [])
+        // The settings tab depends on the slots service; the DOM fold does not.
+        assert.deepEqual(plugin.inject, ['slots'])
         assert.equal(win.__DSH_BUBBLE_FOLD__, undefined)
         assert.equal(win.document.getElementById('dsh-bubble-fold-styles'), null)
         // Now the host activates the row; apply() hands back its disposer.
         disposer = plugin.apply({})
         assert.equal(typeof disposer, 'function')
-        assert.deepEqual(warnings, [], `activation warned: ${warnings.join(' | ')}`)
+        // An empty ctx has no right-bar service, and saying so is the ONLY warning
+        // activation may produce — the fold itself must come up clean.
+        assert.deepEqual(
+          warnings.filter((line) => !line.includes('sidebarRightTabs')),
+          [],
+          `activation warned: ${warnings.join(' | ')}`
+        )
         assert.equal(win.__DSH_BUBBLE_FOLD__?.status, 'running')
       } finally {
         console.warn = originalWarn

@@ -7,6 +7,7 @@
 // module on window for console-level testing.
 import { readFile, writeFile } from 'node:fs/promises'
 import path from 'node:path'
+import vm from 'node:vm'
 import { fileURLToPath } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
@@ -15,7 +16,9 @@ const check = process.argv.includes('--check')
 
 const LOCAL_MODULES = [
   ['./src/fold.js', 'fold'],
-  ['./src/browser.js', 'browser']
+  ['./src/browser.js', 'browser'],
+  ['./src/settings-panel.js', 'settingsPanel'],
+  ['./src/find-panel.js', 'findPanel']
 ]
 
 const stripExports = (source) => source
@@ -68,6 +71,8 @@ const bundle = `${header}(function () {
 ${sources.join('\n')}
   MODULES['./src/fold.js'] = fold
   MODULES['./src/browser.js'] = browser
+  MODULES['./src/settings-panel.js'] = settingsPanel
+  MODULES['./src/find-panel.js'] = findPanel
 
   // Convenience handle for verifying or driving the plugin from the console:
   //   __DSH_BUBBLE_FOLD__.settings() / .update({...}) / .rescan()
@@ -78,6 +83,18 @@ ${indent(entry, 2)}
 `
 
 const target = path.join(root, 'client.js')
+
+// The CSS lives in a template literal, so an unescaped backtick in a comment
+// closes the string early and the bundle still concatenates — into something the
+// host cannot parse, which surfaces as a plugin that never activates. Parse the
+// generated source here so that mistake can never leave this script.
+try {
+  new vm.Script(bundle, { filename: 'client.js' })
+} catch (error) {
+  console.error(`client.js would not parse: ${error.message}`)
+  process.exit(1)
+}
+
 if (check) {
   const current = await readFile(target, 'utf8').catch(() => null)
   if (current !== bundle) {

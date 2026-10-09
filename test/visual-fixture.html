@@ -102,6 +102,32 @@
     <div class="mdRoot"><div class="mdBody" id="replyLong2"></div></div>
   </div>
 
+  <!-- ============ TURN 3: two step runs interleaved with a reply ============
+       The shape the Turn-wide control exists for: several seams in one Turn, so
+       the LAST seam (right before the final answer) carries the second button. -->
+  <div class="flowItem" data-chat-flow-kind="user" data-chat-turn="3" data-chat-anchor-key="user:3">
+    <div class="userRow"><div class="userStack"><div class="bubble" id="userShort3">再跑一轮验证。</div></div></div>
+  </div>
+  <div class="flowItem" data-chat-flow-kind="turn-process" data-chat-turn="3" data-chat-anchor-key="turn-process:3">
+    <button type="button" class="tpRow" data-turn-process="3" aria-expanded="true" data-open="">
+      <span class="tpLabel">第 1 段 · 2 步</span>
+    </button>
+  </div>
+  <div class="flowItem member" data-chat-flow-kind="tool-call" data-chat-turn="3" data-turn-process-member>🔧 read · syncStepFolds</div>
+  <div class="flowItem member" data-chat-flow-kind="tool-call" data-chat-turn="3" data-turn-process-member>🔧 grep · stepFolds</div>
+  <div class="flowItem" data-chat-flow-kind="assistant-step" data-chat-turn="3" data-chat-anchor-key="mid:3">
+    <div class="mdRoot"><div class="mdBody">中间的一句话。</div></div>
+  </div>
+  <div class="flowItem" data-chat-flow-kind="turn-process" data-chat-turn="3" data-chat-anchor-key="turn-process:3b">
+    <button type="button" class="tpRow" data-turn-process="3" aria-expanded="true" data-open="">
+      <span class="tpLabel">第 2 段 · 1 步</span>
+    </button>
+  </div>
+  <div class="flowItem member" data-chat-flow-kind="tool-call" data-chat-turn="3" data-turn-process-member>🔧 pwsh · node test/runtime.test.mjs</div>
+  <div class="flowItem" data-chat-flow-kind="assistant-step" data-chat-turn="3" data-chat-anchor-key="answer:3">
+    <div class="mdRoot"><div class="mdBody" id="replyLong3"></div></div>
+  </div>
+
 </div>
 <script>
   const line = (i) => '这是第 ' + (i + 1) + ' 行用于验证折叠效果的内容，长度足够产生换行与高度。'
@@ -112,6 +138,9 @@
   document.getElementById('userLong2').textContent = paragraphs('最新输入', 12)
   document.getElementById('replyLong1').textContent = paragraphs('旧回复', 24)
   document.getElementById('replyLong2').textContent = paragraphs('最新回复', 16)
+  // Turn 3's final answer is long too: the master button must still be the seam
+  // the reader meets before it.
+  document.getElementById('replyLong3').textContent = paragraphs('第三轮回复', 10)
 
   // Host behaviour: each summary row owns its own state and hides its members.
   const membersAfter = (node) => {
@@ -125,7 +154,9 @@
       const open = !row.hasAttribute('data-open')
       if (open) row.setAttribute('data-open', '')
       else row.removeAttribute('data-open')
-      for (const step of membersAfter(row)) {
+      // Members are siblings of the row's own flow item, not of this button.
+      const host = row.closest('.flowItem') ?? row
+      for (const step of membersAfter(host)) {
         if (open) step.removeAttribute('hidden')
         else step.setAttribute('hidden', 'until-found')
       }

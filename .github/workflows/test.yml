@@ -26,3 +26,6 @@ jobs:
 
       - name: DOM / 交互 / 真实构建产出
         run: node test/runtime.test.mjs
+
+      - name: 客户端入口与设置页注册契约
+        run: node test/entry.test.mjs

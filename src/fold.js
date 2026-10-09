@@ -49,8 +49,8 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** Always applied, even when collapsedByDefault is on. */
   userLines: 6,
   assistantLines: 10,
-  /** Extra px kept below the last visible line (room for the fade + button). */
-  extraPx: 34,
+  /** Gap kept between a collapsed message and its control row, in px. */
+  extraPx: 8,
   /** Collapse every message, not only overlong ones. */
   collapseAll: false,
   /** Line budget used when collapseAll is on. */
@@ -62,7 +62,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** Float a small bubble 展开/收起 control below each native work-step row. */
   workStepButtons: true,
   /** Show a drag handle for manually adjusting the composer height. */
-  composerResize: true
+  composerResize: true,
+  /** Turns start merged into one seam (folded blocks, a single arrow left). */
+  mergeByDefault: true,
+  /** Put the text (展开步骤/收起步骤) on the seam bubble, not just the icon. */
+  stepLabels: false
 })
 
 const clampInt = (value, min, max, fallback) => {
@@ -88,7 +92,9 @@ export function normalizeSettings(input) {
     keepLatestOpen: clampBool(raw.keepLatestOpen, DEFAULT_SETTINGS.keepLatestOpen),
     foldAllSteps: clampBool(raw.foldAllSteps, DEFAULT_SETTINGS.foldAllSteps),
     workStepButtons: clampBool(raw.workStepButtons, DEFAULT_SETTINGS.workStepButtons),
-    composerResize: clampBool(raw.composerResize, DEFAULT_SETTINGS.composerResize)
+    composerResize: clampBool(raw.composerResize, DEFAULT_SETTINGS.composerResize),
+    mergeByDefault: clampBool(raw.mergeByDefault, DEFAULT_SETTINGS.mergeByDefault),
+    stepLabels: clampBool(raw.stepLabels, DEFAULT_SETTINGS.stepLabels)
   }
 }
 
@@ -100,23 +106,19 @@ export function settingsForSide(settings, side) {
 }
 
 /**
- * Max height for the clamp box.
+ * Max height for the clamp box: exactly the visible line budget. Whatever sits
+ * below the box — the control row and its gap — is real flow, never part of it.
  * @param lines - visible line budget.
  * @param lineHeight - resolved line height in CSS px.
- * @param extraPx - px kept below the last line for the fade and the button.
  */
-export function clampHeightFor(lines, lineHeight, extraPx) {
+export function clampHeightFor(lines, lineHeight) {
   const height = (Number(lines) || 0) * (Number(lineHeight) || 0)
   if (!(height > 0)) return 0
-  return Math.round(height + Math.max(0, Number(extraPx) || 0))
+  return Math.round(height)
 }
 
-/**
- * Height of the band reserved below the last visible line, where the fade and
- * the toggle live. Kept separate from the line budget so the mask can never
- * cover a line the reader is supposed to see.
- */
-export function allowanceFor(extraPx) {
+/** Gap between a collapsed message and its control row, in px. */
+export function gapFor(extraPx) {
   return Math.round(Math.max(0, Number(extraPx) || 0))
 }
 
@@ -124,18 +126,17 @@ export function allowanceFor(extraPx) {
  * Decide whether one message body should be clamped.
  * @param input.contentPx - full content height of the body.
  * @param input.lineHeight - resolved line height.
- * @param input.extraPx - px kept below the last visible line.
  */
 export function shouldClamp(input) {
-  const { contentPx, lineHeight, extraPx, lines, collapseAll } = input
+  const { contentPx, lineHeight, lines, collapseAll } = input
   if (!input.sideEnabled) return false
   if (input.streaming) return false
   if (input.alreadyWrapped) return false
   if (!(contentPx > 0) || !(lineHeight > 0)) return false
-  if (collapseAll) return contentPx > clampHeightFor(lines, lineHeight, extraPx)
+  if (collapseAll) return contentPx > clampHeightFor(lines, lineHeight)
   // Overflow mode and collapse-all share the same geometry test; the difference
   // is the line budget (per-side vs collapsedLines), which the caller supplies.
-  return contentPx > clampHeightFor(lines, lineHeight, extraPx)
+  return contentPx > clampHeightFor(lines, lineHeight)
 }
 
 /** A short human label for how much is hidden, e.g. "还有 12 行". */

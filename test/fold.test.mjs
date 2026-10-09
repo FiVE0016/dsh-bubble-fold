@@ -7,6 +7,7 @@ import {
   MODE_ALWAYS,
   MODE_OVERFLOW,
   clampHeightFor,
+  gapFor,
   hiddenLineLabel,
   normalizeSettings,
   settingsForSide,
@@ -70,32 +71,46 @@ test('splits the two sides independently', () => {
 
 console.log('clampHeightFor')
 test('multiplies the budget by the resolved line height', () => {
-  assert.equal(clampHeightFor(10, 22, 0), 220)
+  assert.equal(clampHeightFor(10, 22), 220)
 })
-test('adds the fade/button allowance', () => {
-  assert.equal(clampHeightFor(3, 22, 34), 100)
+test('is exactly the line budget — the control row is not part of the box', () => {
+  assert.equal(clampHeightFor(3, 22), 66)
+  assert.ok(clampHeightFor(3, 22) < clampHeightFor(3, 22) + gapFor(34))
 })
 test('is zero for degenerate input', () => {
-  assert.equal(clampHeightFor(0, 22, 34), 0)
-  assert.equal(clampHeightFor(4, 0, 34), 0)
+  assert.equal(clampHeightFor(0, 22), 0)
+  assert.equal(clampHeightFor(4, 0), 0)
 })
-test('never returns a negative height', () => {
-  assert.equal(clampHeightFor(4, 22, -100), 88)
+
+console.log('gapFor')
+test('passes the gap through and floors it at zero', () => {
+  assert.equal(gapFor(34), 34)
+  assert.equal(gapFor(0), 0)
+  assert.equal(gapFor(-100), 0)
+  assert.equal(gapFor('nonsense'), 0)
+})
+test('the default gap is small: it only separates the message from its control', () => {
+  assert.equal(gapFor(DEFAULT_SETTINGS.extraPx), DEFAULT_SETTINGS.extraPx)
+  assert.ok(DEFAULT_SETTINGS.extraPx <= 16, 'a gap larger than the pill starts to look like a hole')
 })
 
 console.log('shouldClamp')
-const base = { sideEnabled: true, streaming: false, alreadyWrapped: false, lineHeight: 22, extraPx: 34, lines: 6, collapseAll: false, mode: MODE_OVERFLOW }
+const base = { sideEnabled: true, streaming: false, alreadyWrapped: false, lineHeight: 22, lines: 6, collapseAll: false, mode: MODE_OVERFLOW }
 test('collapses content over the line budget', () => {
   assert.equal(shouldClamp({ ...base, contentPx: 400 }), true)
 })
 test('leaves short content alone in overflow mode', () => {
   assert.equal(shouldClamp({ ...base, contentPx: 100 }), false)
-  assert.equal(shouldClamp({ ...base, contentPx: 166 }), false)
+  // 6 lines of 22px is the whole box: at the budget the message still fits.
+  assert.equal(shouldClamp({ ...base, contentPx: 132 }), false)
+  assert.equal(shouldClamp({ ...base, contentPx: 141 }), true)
 })
 test('collapses anything longer than the box once collapseAll is on', () => {
   const collapsed = { ...base, collapseAll: true, lines: 3, mode: MODE_ALWAYS }
   assert.equal(shouldClamp({ ...collapsed, contentPx: 200 }), true)
-  assert.equal(shouldClamp({ ...collapsed, contentPx: 90 }), false)
+  // Three lines of 22px is the whole box; the 3px over it already counts.
+  assert.equal(shouldClamp({ ...collapsed, contentPx: 66 }), false)
+  assert.equal(shouldClamp({ ...collapsed, contentPx: 90 }), true)
 })
 test('respects the per-side switch', () => {
   assert.equal(shouldClamp({ ...base, contentPx: 400, sideEnabled: false }), false)
