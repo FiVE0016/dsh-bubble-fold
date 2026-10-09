@@ -1,6 +1,6 @@
 {
   "name": "dsh-bubble-fold",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Fold overlong messages and work-step blocks in the DeepSeek Harness conversation: the newest turn stays open, history folds into one click. Pure client-side, display-only.",
   "keywords": [
     "dsh",

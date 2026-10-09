@@ -1,6 +1,6 @@
 # 更新记录
 
-## 未发布
+## 0.9.2 — 2026-10-09
 
 - **显示名改为「UI 美化」**：设置页 tab、浮层面板标题、README 一律显示「UI 美化」（功能早已不止折叠：折叠、步骤、输入框、右栏占比、查找）。npm 包名 / 内部 id / 仓库名暂**未改**（改名 = 重新发一个新包、失去下载量与历史），是否连技术名一起改待定。
 - **右侧栏占比**：新增 `rightbarRatio` 设置（30–70%，默认 45%）。设置页和浮层面板都能选；**拖动右栏手柄会实时把占比写回设置**；**重启后保持**。实现要点（这条链路在真机上被坑了五轮，细节见 DEVELOPING）：宿主公开的 `ctx.layout` 是 `LayoutController`（字段 `panels`/`hasMainPanel`/`panelInfo`/`navigation`），设宽走 `layout.panels.setRightbar(px)` 并**先**用 `setViewportWidth(真实帧宽)` 校正它自己的钳位基准；但宿主把右栏那一列写成 `minmax(0px, max)`、**按内容定宽**，所以插件另外写一条带 `!important` 的样式规则把那一列钉到目标像素——这才是真正决定渲染的东西；拖拽联动靠比较宿主内联 grid 里的数字（带 800ms 门闩，避免把我们自己的应用当成拖动）。自检：`rightbar()` 给出 `ratio` 与 `renderedRatio`，`layoutTry()` 做真机实验。
