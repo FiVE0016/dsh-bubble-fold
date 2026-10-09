@@ -113,6 +113,8 @@ window.__ModuleLoader__.load({
       const panels = layout?.panels ?? null
       const setRightbar = typeof panels?.setRightbar === 'function' ? panels.setRightbar
         : (typeof layout?.setRightbar === 'function' ? layout.setRightbar : null)
+      /** The store clamps against its own viewport width; keep it truthful. */
+      const setViewport = typeof panels?.setViewportWidth === 'function' ? panels.setViewportWidth : null
       const viewportOf = () => view?.innerWidth || 0
       /**
        * The AppFrame is the grid owning the three columns (sidebar | conversation |
@@ -173,15 +175,21 @@ window.__ModuleLoader__.load({
         const viewport = viewportOf()
         if (!(viewport > 0)) return false
         try {
+          // Keep the store's own idea of the frame width in step. It clamps the
+          // requested width against ITS `viewportWidth`, which at boot can still be
+          // 0 — and then every request collapses to the 300px floor, which is the
+          // "sidebar comes back to its initial position" a restart showed.
+          setViewport?.(viewport)
           setRightbar(Math.round(viewport * ratio / 100))
           return true
         } catch {
           return false
         }
       }
-      // The frame is not measurable at activation time, and the controller (which
-      // owns the settings) is created after this control, so the first attempt is
-      // deferred and every failed attempt is retried.
+      // The frame is not measurable at activation time, the controller (which owns
+      // the settings) is created after this control, and the window itself may only
+      // settle later — so keep retrying for a while and stop as soon as the width
+      // really matches what was asked for.
       const timers = []
       const applyStored = (attempt) => {
         if (disposed) return
@@ -192,8 +200,8 @@ window.__ModuleLoader__.load({
           settled = true
           return
         }
-        if (attempt < 8) {
-          timers.push(view.setTimeout(() => applyStored(attempt + 1), 300))
+        if (attempt < 20) {
+          timers.push(view.setTimeout(() => applyStored(attempt + 1), 500))
           return
         }
         settled = !!setRightbar

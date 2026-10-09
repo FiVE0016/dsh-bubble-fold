@@ -293,18 +293,26 @@ test('a hostile restricted ctx cannot make apply throw (boot must survive)', () 
 
 test('the right-sidebar ratio is applied through layout.panels.setRightbar', async () => {
   const calls = []
+  const viewports = []
   const { plugin, win } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36' })
   const ctx = {
     slots: { inject: (_name, callback) => { callback(); return () => {} }, register: () => () => {} },
     // The host's real shape: a LayoutController carrying the store actions as
     // `panels`. `layout.setRightbar` does NOT exist — that wrong guess is why the
     // setting silently did nothing on the first release of this control.
-    get: (name) => (name === 'layout' ? { panels: { setRightbar: (px) => calls.push(px) } } : undefined)
+    get: (name) => (name === 'layout'
+      ? { panels: { setRightbar: (px) => calls.push(px), setViewportWidth: (px) => viewports.push(px) } }
+      : undefined)
   }
   plugin.apply(ctx)
   await tick()
   assert.ok(calls.length > 0, '激活时就应用了设置里的占比')
   assert.equal(calls[0], Math.round(1600 * 45 / 100), '像素 = 帧宽 × 占比')
+  // The store clamps against its own viewportWidth, which is 0 during boot; without
+  // this correction every request collapses to the 300px floor and a restart loses
+  // the width the reader chose.
+  assert.ok(viewports.length > 0, '先校正 store 的 viewportWidth')
+  assert.equal(viewports[0], 1600, '用真实帧宽校正')
   win.__DSH_BUBBLE_FOLD__.setRightbarRatio(60)
   assert.equal(calls.at(-1), Math.round(1600 * 60 / 100), '改设置立刻应用')
   assert.equal(win.__DSH_BUBBLE_FOLD__.rightbar().supported, true)
