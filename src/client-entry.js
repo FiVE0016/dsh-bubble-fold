@@ -56,6 +56,11 @@ window.__ModuleLoader__.load({
       subscribe: (fn) => controller?.subscribe(fn) ?? (() => {}),
       search: (query) => controller?.search(query) ?? [],
       revealAt: (element) => controller?.revealAt(element),
+      // The composer height is a host-CSS knob, not a plugin setting: the settings
+      // page reads its range/current value here instead of from `settings()`.
+      composer: () => controller?.composer() ?? null,
+      setHeight: (value) => controller?.setHeight(value),
+      resetHeight: () => controller?.resetHeight(),
       onFindPanelMounted: (fn) => { focusFindInput = fn }
     }
 

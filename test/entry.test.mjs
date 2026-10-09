@@ -5,10 +5,11 @@
 import assert from 'node:assert/strict'
 import { readFile } from 'node:fs/promises'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const source = await readFile(path.join(here, '..', 'src', 'client-entry.js'), 'utf8')
+const foldModule = await import(pathToFileURL(path.join(here, '..', 'src', 'fold.js')).href)
 
 const FIND_TAB_ID = 'bubble-fold-find'
 
@@ -186,6 +187,60 @@ test('without the right-bar service the layout is never touched', () => {
   const event = { key: 'f', ctrlKey: true, shiftKey: false, altKey: false, preventDefault() {} }
   handler(event)
   assert.deepEqual(layoutCalls, [], 'Ctrl+F must not open an empty right column')
+})
+
+test('the settings page covers every setting the in-page panel has', async () => {
+  const { createPanel } = await import(pathToFileURL(path.join(here, '..', 'src', 'settings-panel.js')).href)
+  // A minimal React stand-in: the panel only uses createElement/useState/useEffect.
+  const React = {
+    createElement: (type, props, ...children) => ({ type, props: { ...(props ?? {}), children } }),
+    useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
+    useEffect: () => {}
+  }
+  const settings = { ...foldModule.DEFAULT_SETTINGS }
+  const api = {
+    settings: () => settings,
+    update: () => {},
+    subscribe: () => () => {},
+    composer: () => ({ min: 200, max: 900, value: 336, fallback: 336 }),
+    setHeight: () => {},
+    resetHeight: () => {}
+  }
+  const tree = createPanel(React, api)({ api })
+
+  // The tree is nested createElement objects; every control is built by Row with a
+  // `label` prop, so collecting those labels proves the page is complete.
+  const labels = []
+  const walk = (node) => {
+    if (Array.isArray(node)) { for (const child of node) walk(child); return }
+    if (!node || typeof node !== 'object') return
+    if (node.props?.label) labels.push(node.props.label)
+    walk(node.props?.children)
+  }
+  walk(tree)
+
+  // Mirrors the in-page panel row for row: 14 settings + the composer height.
+  const expected = [
+    '启用插件',
+    '最新一轮保持展开',
+    '折叠我的输入',
+    '我的输入保留行数',
+    '折叠助手回复',
+    '助手回复保留行数',
+    '全部消息都折叠',
+    '折叠后保留行数',
+    '折叠后与控件的间距 (px)',
+    '步骤区与回复之间加折叠按钮',
+    '步骤默认收起',
+    '默认只留一个按钮',
+    '按钮显示文字',
+    '输入框可拖动调高',
+    '输入框高度'
+  ]
+  for (const label of expected) {
+    assert.ok(labels.includes(label), `设置页缺少「${label}」`)
+  }
+  assert.equal(expected.length, Object.keys(foldModule.DEFAULT_SETTINGS).length + 1, 'no setting is left out')
 })
 
 test('a hostile restricted ctx cannot make apply throw (boot must survive)', () => {

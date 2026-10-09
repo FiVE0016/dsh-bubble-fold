@@ -2631,6 +2631,11 @@ export function start(win, React) {
     // Manual controls, also available from the console for scripting/tests.
     setHeight: (value) => setComposerHeight(value),
     resetHeight: () => resetComposerHeight(),
+    /**
+     * The composer height is a host-CSS knob rather than a plugin setting, so the
+     * settings page asks for it separately (range, current value, stock fallback).
+     */
+    composer: () => ({ min: COMPOSER_MIN, max: COMPOSER_MAX, value: composerHeight, fallback: F.COMPOSER_DEFAULT }),
     // The sidebar find panel: search the rendered conversation (folded content
     // included) and reveal one hit by unfolding whatever hides it.
     search: searchConversation,

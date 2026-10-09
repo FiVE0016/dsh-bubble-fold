@@ -15,6 +15,8 @@ dsh plugin --profile desktop add dsh-bubble-fold
 
 ![默认状态：历史折起、步骤收成一条折叠缝、最新一轮保持展开](assets/step-fold-default.png)
 
+![折叠与展开的切换](assets/demo.gif)
+
 ## 功能
 
 ### 消息
@@ -65,7 +67,7 @@ dsh plugin --profile desktop add dsh-bubble-fold
 
 ### 设置项
 
-`Ctrl + Shift + ,` 打开对话页浮层面板，改动即时生效；**设置 → 插件 → "气泡折叠" tab** 里也有一份常用设置的宿主原生入口。
+`Ctrl + Shift + ,` 打开对话页浮层面板，改动即时生效；**设置 → 插件 → "气泡折叠" tab** 是同一套设置的宿主原生入口，**两边一一对应、完全同步**（14 项设置 + 输入框高度）。
 
 | 项 | 默认 |
 | --- | --- |
