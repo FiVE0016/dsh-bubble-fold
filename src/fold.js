@@ -39,7 +39,9 @@ export const LIMITS = Object.freeze({
   maxLines: 120,
   minExtraPx: 0,
   maxExtraPx: 120,
-  maxDefaultCollapsedLines: 60
+  maxDefaultCollapsedLines: 60,
+  minRightbarRatio: 30,
+  maxRightbarRatio: 70
 })
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -66,7 +68,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
   /** Turns start merged into one seam (folded blocks, a single arrow left). */
   mergeByDefault: true,
   /** Put the text (展开步骤/收起步骤) on the seam bubble, not just the icon. */
-  stepLabels: false
+  stepLabels: false,
+  /** Preferred right-sidebar width, as a percent of the frame (30–70). */
+  rightbarRatio: 45
 })
 
 const clampInt = (value, min, max, fallback) => {
@@ -94,7 +98,8 @@ export function normalizeSettings(input) {
     workStepButtons: clampBool(raw.workStepButtons, DEFAULT_SETTINGS.workStepButtons),
     composerResize: clampBool(raw.composerResize, DEFAULT_SETTINGS.composerResize),
     mergeByDefault: clampBool(raw.mergeByDefault, DEFAULT_SETTINGS.mergeByDefault),
-    stepLabels: clampBool(raw.stepLabels, DEFAULT_SETTINGS.stepLabels)
+    stepLabels: clampBool(raw.stepLabels, DEFAULT_SETTINGS.stepLabels),
+    rightbarRatio: clampInt(raw.rightbarRatio, LIMITS.minRightbarRatio, LIMITS.maxRightbarRatio, DEFAULT_SETTINGS.rightbarRatio)
   }
 }
 

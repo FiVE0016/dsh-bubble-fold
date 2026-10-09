@@ -46,6 +46,8 @@ window.__ModuleLoader__.load({
     let findPanelOff = null
     /** The find panel asks for focus when it opens; the keydown route sets it. */
     let focusFindInput = null
+    /** Two-way sync with the host's right-sidebar width; null when unsupported. */
+    let rightbar = null
 
     // Stable api object for the settings tab and the find panel: the components
     // mount on first selection (possibly before or after a restart of the fold),
@@ -61,6 +63,11 @@ window.__ModuleLoader__.load({
       composer: () => controller?.composer() ?? null,
       setHeight: (value) => controller?.setHeight(value),
       resetHeight: () => controller?.resetHeight(),
+      // Right-sidebar width: the percentage lives in the settings, the px in the
+      // host's layout store. setRightbarRatio applies it; rightbar() reports what
+      // the host actually shows, so the page can say "不支持" on older hosts.
+      setRightbarRatio: (ratio) => rightbar?.setRatio(ratio),
+      rightbar: () => rightbar?.info() ?? null,
       onFindPanelMounted: (fn) => { focusFindInput = fn }
     }
 
@@ -75,15 +82,93 @@ window.__ModuleLoader__.load({
       findTabOff?.()
       findTitleOff?.()
       findPanelOff?.()
+      rightbar?.dispose()
       panelOff = null
       findTabOff = null
       findTitleOff = null
       findPanelOff = null
+      rightbar = null
       focusFindInput = null
       controller?.dispose()
       controller = null
       // Leave no trace of the console handle once the row is gone.
       delete window.__DSH_BUBBLE_FOLD__
+    }
+
+    /**
+     * Two-way sync between the host's right-sidebar width (px) and the plugin
+     * setting `rightbarRatio` (percent of the frame). The host resets to 45% on
+     * first open, so the percentage lives in OUR settings to survive a restart;
+     * the px lives in the host's layout store, which we read/set/subscribe through
+     * the `layout` service. That service's documented surface is five methods, but
+     * the provided object is the full store — every extra member is probed
+     * defensively so an older host just loses this control, nothing else.
+     */
+    const makeRightbarControl = (layout, view, getSettings, updateSettings) => {
+      let disposed = false
+      const store = layout?.layoutInfo ?? null
+      const snapshot = () => {
+        try {
+          if (store && typeof store.getSnapshot === 'function') return store.getSnapshot()
+          const whole = layout?.getSnapshot?.()
+          if (whole && typeof whole === 'object' && whole.layoutInfo) return whole.layoutInfo
+        } catch { /* the host shaped it differently */ }
+        return null
+      }
+      const setRightbar = typeof layout?.setRightbar === 'function' ? layout.setRightbar : null
+      const subscribe = typeof store?.subscribe === 'function' ? store.subscribe
+        : (typeof layout?.subscribe === 'function' ? layout.subscribe : null)
+      const viewportOf = (info) => {
+        const px = info && Number.isFinite(info.viewportWidth) ? info.viewportWidth : 0
+        return px > 0 ? px : (view?.innerWidth || 0)
+      }
+      const ratioOf = (info) => {
+        const viewport = viewportOf(info)
+        const px = info?.rightbar
+        if (!viewport || !(px > 0)) return null
+        return Math.round((px / viewport) * 100)
+      }
+      let lastRatio = null
+      const observe = () => {
+        const ratio = ratioOf(snapshot())
+        if (ratio === null || ratio === lastRatio) return
+        lastRatio = ratio
+        if (getSettings()?.rightbarRatio !== ratio) updateSettings({ rightbarRatio: ratio })
+      }
+      const applyStored = () => {
+        if (disposed || !setRightbar) return
+        const ratio = getSettings()?.rightbarRatio
+        const viewport = viewportOf(snapshot())
+        if (!(viewport > 0) || !Number.isFinite(ratio)) return
+        try { setRightbar(Math.round(viewport * ratio / 100)) } catch { /* no width control */ }
+      }
+      let off = null
+      if (subscribe) {
+        try { off = subscribe(observe) } catch { off = null }
+      }
+      view.setTimeout(applyStored, 0)
+
+      return {
+        setRatio(ratio) {
+          const clamped = Math.max(30, Math.min(70, Math.round(Number(ratio) || 45)))
+          updateSettings({ rightbarRatio: clamped })
+          if (setRightbar) {
+            const viewport = viewportOf(snapshot())
+            try { setRightbar(Math.round(viewport * clamped / 100)) } catch { /* ignore */ }
+          }
+          lastRatio = null
+          observe()
+        },
+        info() {
+          const info = snapshot()
+          return { supported: !!setRightbar, ratio: ratioOf(info), viewport: viewportOf(info), shown: info?.rightbarShown ?? null }
+        },
+        dispose() {
+          disposed = true
+          off?.()
+          off = null
+        }
+      }
     }
 
     const plugin = {
@@ -106,6 +191,11 @@ window.__ModuleLoader__.load({
       applyRow(ctx) {
         if (controller !== null) return
         try {
+          // Build the width control before the controller exists: its accessors
+          // reach `controller` lazily, and it is passed into start() for the
+          // floating panel's own ratio input.
+          const layout = ctx?.get?.('layout') ?? null
+          rightbar = layout ? makeRightbarControl(layout, view, () => controller?.settings(), (patch) => controller?.update(patch)) : null
           controller = start({
             document,
             localStorage: view.localStorage,
@@ -118,6 +208,7 @@ window.__ModuleLoader__.load({
             Element: view.Element,
             addEventListener: view.addEventListener.bind(view),
             removeEventListener: view.removeEventListener.bind(view),
+            rightbar,
             __DSH_BUBBLE_FOLD_MODULES__: { fold }
           }, React)
         } catch (error) {
@@ -136,7 +227,7 @@ window.__ModuleLoader__.load({
               name: 'settings.plugins.tab',
               id: 'bubble-fold',
               order: 20,
-              label: '气泡折叠',
+              label: 'UI 美化',
               inject: () => ({ api })
             }, createPanel(React, api)))
           } catch (error) {
@@ -266,6 +357,21 @@ window.__ModuleLoader__.load({
           revealAt: (element) => controller?.revealAt(element),
           setHeight: (value) => controller?.setHeight(value),
           resetHeight: () => controller?.resetHeight(),
+          setRightbarRatio: (ratio) => rightbar?.setRatio(ratio),
+          rightbar: () => rightbar?.info() ?? null,
+          // Diagnostic for the right-sidebar width feature: dumps the host layout
+          // service's real shape, so a mis-synced width can be reported precisely.
+          layoutDebug: () => {
+            const layout = ctx?.get?.('layout') ?? null
+            if (!layout) return { layout: null }
+            const snapshot = (() => { try { return layout.getSnapshot?.() ?? null } catch { return null } })()
+            return {
+              keys: Object.keys(layout),
+              setRightbar: typeof layout.setRightbar,
+              layoutInfoKeys: layout.layoutInfo ? Object.keys(layout.layoutInfo) : null,
+              layoutInfo: snapshot?.layoutInfo ?? null
+            }
+          },
           dispose
         }
 

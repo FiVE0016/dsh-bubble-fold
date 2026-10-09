@@ -50,7 +50,9 @@
       maxLines: 120,
       minExtraPx: 0,
       maxExtraPx: 120,
-      maxDefaultCollapsedLines: 60
+      maxDefaultCollapsedLines: 60,
+      minRightbarRatio: 30,
+      maxRightbarRatio: 70
     })
 
     const DEFAULT_SETTINGS = Object.freeze({
@@ -77,7 +79,9 @@
       /** Turns start merged into one seam (folded blocks, a single arrow left). */
       mergeByDefault: true,
       /** Put the text (展开步骤/收起步骤) on the seam bubble, not just the icon. */
-      stepLabels: false
+      stepLabels: false,
+      /** Preferred right-sidebar width, as a percent of the frame (30–70). */
+      rightbarRatio: 45
     })
 
     const clampInt = (value, min, max, fallback) => {
@@ -105,7 +109,8 @@
         workStepButtons: clampBool(raw.workStepButtons, DEFAULT_SETTINGS.workStepButtons),
         composerResize: clampBool(raw.composerResize, DEFAULT_SETTINGS.composerResize),
         mergeByDefault: clampBool(raw.mergeByDefault, DEFAULT_SETTINGS.mergeByDefault),
-        stepLabels: clampBool(raw.stepLabels, DEFAULT_SETTINGS.stepLabels)
+        stepLabels: clampBool(raw.stepLabels, DEFAULT_SETTINGS.stepLabels),
+        rightbarRatio: clampInt(raw.rightbarRatio, LIMITS.minRightbarRatio, LIMITS.maxRightbarRatio, DEFAULT_SETTINGS.rightbarRatio)
       }
     }
 
@@ -2085,8 +2090,8 @@
         panel.setAttribute('data-lf-panel', '1')
 
         const title = doc.createElement('h4')
-        // 用户消息是气泡，助手回复是正文块，统称"消息"才不会误导。
-        title.textContent = '消息与步骤折叠'
+        // 折叠只是这个插件最早的功能；现在它顺带接管输入框、步骤、右栏宽度与查找。
+        title.textContent = 'UI 美化'
         panel.appendChild(title)
 
         const row = (labelText, control) => {
@@ -2142,6 +2147,25 @@
         row('默认只留一个按钮', checkbox('mergeByDefault'))
         row('按钮显示文字', checkbox('stepLabels'))
         row('输入框可拖动调高', checkbox('composerResize'))
+
+        // 右侧栏宽度：百分比存进设置（重启后保持），像素由宿主 layout store 管。
+        // 这里提交时把值交给 win.rightbar 去同时改设置和宿主宽度；拖动宿主手柄时，
+        // 宿主 store 的变化又通过控制器写回这个百分比，两边始终一致。
+        const ratioInput = doc.createElement('input')
+        ratioInput.type = 'number'
+        ratioInput.min = String(F.LIMITS.minRightbarRatio)
+        ratioInput.max = String(F.LIMITS.maxRightbarRatio)
+        ratioInput.value = String(settings.rightbarRatio)
+        ratioInput.setAttribute('data-lf-key', 'rightbarRatio')
+        ratioInput.addEventListener('change', () => {
+          const parsed = Number.parseInt(ratioInput.value, 10)
+          if (!Number.isFinite(parsed)) {
+            ratioInput.value = String(settings.rightbarRatio)
+            return
+          }
+          win.rightbar?.setRatio?.(parsed)
+        })
+        row('右侧栏占比 (%)', ratioInput)
 
         // The composer height is not a plugin setting: it drives the host's own CSS
         // variable, so it gets its own control rather than the settings schema.
@@ -2806,7 +2830,7 @@
         const [settings, setSettings] = React.useState(() => api.settings())
         React.useEffect(() => api.subscribe(() => setSettings(api.settings())), [])
         if (!settings) {
-          return h('div', { 'data-lf-setting-empty': '1' }, '气泡折叠未启动。')
+          return h('div', { 'data-lf-setting-empty': '1' }, 'UI 美化未启动。')
         }
         const patch = (part) => api.update(part)
         const toggle = (key, label, hint) => h(Row, { label, hint }, h(Toggle, {
@@ -2839,6 +2863,20 @@
           toggle('mergeByDefault', '默认只留一个按钮', '每轮回复上方只显示「展开全部」；点开才摊开各条折叠缝，内容仍收起。'),
           toggle('stepLabels', '按钮显示文字', '开：三个按钮各带「展开全部 / 展开所有步骤 / 展开本步骤」文字；关：只留三个不同的箭头图标。'),
           toggle('composerResize', '输入框可拖动调高', '在输入框卡片顶部显示一条拖拽手柄。'),
+          h(Row, {
+            label: '右侧栏占比 (%)',
+            hint: (() => {
+              const rb = api.rightbar?.()
+              if (rb && !rb.supported) return '当前宿主不支持程序化调宽；仍可拖动右栏手柄，拖动会同步回这个数字。'
+              return '拖动右栏手柄会同步这个数字；下次打开保持。'
+            })()
+          }, h(NumberBox, {
+            value: settings.rightbarRatio,
+            min: 30,
+            max: 70,
+            suffix: '%',
+            onChange: (value) => api.setRightbarRatio(value)
+          })),
           h(Row, {
             label: '输入框高度',
             hint: composer
@@ -3012,6 +3050,8 @@
       let findPanelOff = null
       /** The find panel asks for focus when it opens; the keydown route sets it. */
       let focusFindInput = null
+      /** Two-way sync with the host's right-sidebar width; null when unsupported. */
+      let rightbar = null
 
       // Stable api object for the settings tab and the find panel: the components
       // mount on first selection (possibly before or after a restart of the fold),
@@ -3027,6 +3067,11 @@
         composer: () => controller?.composer() ?? null,
         setHeight: (value) => controller?.setHeight(value),
         resetHeight: () => controller?.resetHeight(),
+        // Right-sidebar width: the percentage lives in the settings, the px in the
+        // host's layout store. setRightbarRatio applies it; rightbar() reports what
+        // the host actually shows, so the page can say "不支持" on older hosts.
+        setRightbarRatio: (ratio) => rightbar?.setRatio(ratio),
+        rightbar: () => rightbar?.info() ?? null,
         onFindPanelMounted: (fn) => { focusFindInput = fn }
       }
 
@@ -3041,15 +3086,93 @@
         findTabOff?.()
         findTitleOff?.()
         findPanelOff?.()
+        rightbar?.dispose()
         panelOff = null
         findTabOff = null
         findTitleOff = null
         findPanelOff = null
+        rightbar = null
         focusFindInput = null
         controller?.dispose()
         controller = null
         // Leave no trace of the console handle once the row is gone.
         delete window.__DSH_BUBBLE_FOLD__
+      }
+
+      /**
+       * Two-way sync between the host's right-sidebar width (px) and the plugin
+       * setting `rightbarRatio` (percent of the frame). The host resets to 45% on
+       * first open, so the percentage lives in OUR settings to survive a restart;
+       * the px lives in the host's layout store, which we read/set/subscribe through
+       * the `layout` service. That service's documented surface is five methods, but
+       * the provided object is the full store — every extra member is probed
+       * defensively so an older host just loses this control, nothing else.
+       */
+      const makeRightbarControl = (layout, view, getSettings, updateSettings) => {
+        let disposed = false
+        const store = layout?.layoutInfo ?? null
+        const snapshot = () => {
+          try {
+            if (store && typeof store.getSnapshot === 'function') return store.getSnapshot()
+            const whole = layout?.getSnapshot?.()
+            if (whole && typeof whole === 'object' && whole.layoutInfo) return whole.layoutInfo
+          } catch { /* the host shaped it differently */ }
+          return null
+        }
+        const setRightbar = typeof layout?.setRightbar === 'function' ? layout.setRightbar : null
+        const subscribe = typeof store?.subscribe === 'function' ? store.subscribe
+          : (typeof layout?.subscribe === 'function' ? layout.subscribe : null)
+        const viewportOf = (info) => {
+          const px = info && Number.isFinite(info.viewportWidth) ? info.viewportWidth : 0
+          return px > 0 ? px : (view?.innerWidth || 0)
+        }
+        const ratioOf = (info) => {
+          const viewport = viewportOf(info)
+          const px = info?.rightbar
+          if (!viewport || !(px > 0)) return null
+          return Math.round((px / viewport) * 100)
+        }
+        let lastRatio = null
+        const observe = () => {
+          const ratio = ratioOf(snapshot())
+          if (ratio === null || ratio === lastRatio) return
+          lastRatio = ratio
+          if (getSettings()?.rightbarRatio !== ratio) updateSettings({ rightbarRatio: ratio })
+        }
+        const applyStored = () => {
+          if (disposed || !setRightbar) return
+          const ratio = getSettings()?.rightbarRatio
+          const viewport = viewportOf(snapshot())
+          if (!(viewport > 0) || !Number.isFinite(ratio)) return
+          try { setRightbar(Math.round(viewport * ratio / 100)) } catch { /* no width control */ }
+        }
+        let off = null
+        if (subscribe) {
+          try { off = subscribe(observe) } catch { off = null }
+        }
+        view.setTimeout(applyStored, 0)
+
+        return {
+          setRatio(ratio) {
+            const clamped = Math.max(30, Math.min(70, Math.round(Number(ratio) || 45)))
+            updateSettings({ rightbarRatio: clamped })
+            if (setRightbar) {
+              const viewport = viewportOf(snapshot())
+              try { setRightbar(Math.round(viewport * clamped / 100)) } catch { /* ignore */ }
+            }
+            lastRatio = null
+            observe()
+          },
+          info() {
+            const info = snapshot()
+            return { supported: !!setRightbar, ratio: ratioOf(info), viewport: viewportOf(info), shown: info?.rightbarShown ?? null }
+          },
+          dispose() {
+            disposed = true
+            off?.()
+            off = null
+          }
+        }
       }
 
       const plugin = {
@@ -3072,6 +3195,11 @@
         applyRow(ctx) {
           if (controller !== null) return
           try {
+            // Build the width control before the controller exists: its accessors
+            // reach `controller` lazily, and it is passed into start() for the
+            // floating panel's own ratio input.
+            const layout = ctx?.get?.('layout') ?? null
+            rightbar = layout ? makeRightbarControl(layout, view, () => controller?.settings(), (patch) => controller?.update(patch)) : null
             controller = start({
               document,
               localStorage: view.localStorage,
@@ -3084,6 +3212,7 @@
               Element: view.Element,
               addEventListener: view.addEventListener.bind(view),
               removeEventListener: view.removeEventListener.bind(view),
+              rightbar,
               __DSH_BUBBLE_FOLD_MODULES__: { fold }
             }, React)
           } catch (error) {
@@ -3102,7 +3231,7 @@
                 name: 'settings.plugins.tab',
                 id: 'bubble-fold',
                 order: 20,
-                label: '气泡折叠',
+                label: 'UI 美化',
                 inject: () => ({ api })
               }, createPanel(React, api)))
             } catch (error) {
@@ -3232,6 +3361,21 @@
             revealAt: (element) => controller?.revealAt(element),
             setHeight: (value) => controller?.setHeight(value),
             resetHeight: () => controller?.resetHeight(),
+            setRightbarRatio: (ratio) => rightbar?.setRatio(ratio),
+            rightbar: () => rightbar?.info() ?? null,
+            // Diagnostic for the right-sidebar width feature: dumps the host layout
+            // service's real shape, so a mis-synced width can be reported precisely.
+            layoutDebug: () => {
+              const layout = ctx?.get?.('layout') ?? null
+              if (!layout) return { layout: null }
+              const snapshot = (() => { try { return layout.getSnapshot?.() ?? null } catch { return null } })()
+              return {
+                keys: Object.keys(layout),
+                setRightbar: typeof layout.setRightbar,
+                layoutInfoKeys: layout.layoutInfo ? Object.keys(layout.layoutInfo) : null,
+                layoutInfo: snapshot?.layoutInfo ?? null
+              }
+            },
             dispose
           }
 

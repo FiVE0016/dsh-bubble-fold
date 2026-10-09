@@ -116,7 +116,7 @@ test('registers one tab into settings.plugins.tab', () => {
   assert.ok(tab, 'the settings tab was registered')
   assert.equal(tab.options.id, 'bubble-fold', 'a fresh id adds a tab beside "all"')
   assert.equal(tab.options.order, 20)
-  assert.equal(tab.options.label, '气泡折叠')
+  assert.equal(tab.options.label, 'UI 美化')
   assert.equal(typeof tab.component, 'function', 'the panel component is a function')
 })
 
@@ -204,7 +204,9 @@ test('the settings page covers every setting the in-page panel has', async () =>
     subscribe: () => () => {},
     composer: () => ({ min: 200, max: 900, value: 336, fallback: 336 }),
     setHeight: () => {},
-    resetHeight: () => {}
+    resetHeight: () => {},
+    rightbar: () => ({ supported: true, ratio: 45 }),
+    setRightbarRatio: () => {}
   }
   const tree = createPanel(React, api)({ api })
 
@@ -235,6 +237,7 @@ test('the settings page covers every setting the in-page panel has', async () =>
     '默认只留一个按钮',
     '按钮显示文字',
     '输入框可拖动调高',
+    '右侧栏占比 (%)',
     '输入框高度'
   ]
   for (const label of expected) {

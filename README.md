@@ -1,17 +1,19 @@
-# dsh-bubble-fold
+# UI 美化
+
+> 显示名「UI 美化」；npm 包名仍是 **`dsh-bubble-fold`**（技术标识暂未改，见文末）。
 
 [![npm version](https://img.shields.io/npm/v/dsh-bubble-fold.svg)](https://www.npmjs.com/package/dsh-bubble-fold)
 [![npm downloads](https://img.shields.io/npm/dm/dsh-bubble-fold.svg)](https://www.npmjs.com/package/dsh-bubble-fold)
 [![test](https://github.com/FiVE0016/dsh-bubble-fold/actions/workflows/test.yml/badge.svg)](https://github.com/FiVE0016/dsh-bubble-fold/actions/workflows/test.yml)
 [![license](https://img.shields.io/npm/l/dsh-bubble-fold.svg)](LICENSE)
 
-给 DSH 会话加一层"阅读优先"的折叠：**最新一轮永远是展开的，历史消息与工作步骤自动收起来**，想看细节点一下就回来。
+给 DSH 会话加一层"阅读优先"的显示优化：**消息与工作步骤自动折叠、输入框可调、右栏占比可设、一键查找**——想看清楚的点一下就回来。
 
 ```sh
 dsh plugin --profile desktop add dsh-bubble-fold
 ```
 
-> English — A display-only plugin for DeepSeek Harness: the newest turn always stays open, while older messages and every run of work-step rows fold into one click.
+> English — A display-only plugin for DeepSeek Harness: the newest turn always stays open, while older messages and every run of work-step rows fold into one click; plus composer sizing, right-sidebar width, and find.
 
 ![默认状态：历史折起、步骤收成一条折叠缝、最新一轮保持展开](assets/step-fold-default.png)
 
@@ -67,7 +69,7 @@ dsh plugin --profile desktop add dsh-bubble-fold
 
 ### 设置项
 
-`Ctrl + Shift + ,` 打开对话页浮层面板，改动即时生效；**设置 → 插件 → "气泡折叠" tab** 是同一套设置的宿主原生入口，**两边一一对应、完全同步**（14 项设置 + 输入框高度）。
+`Ctrl + Shift + ,` 打开对话页浮层面板，改动即时生效；**设置 → 插件 → "UI 美化" tab** 是同一套设置的宿主原生入口，**两边一一对应、完全同步**。
 
 | 项 | 默认 |
 | --- | --- |
@@ -82,11 +84,18 @@ dsh plugin --profile desktop add dsh-bubble-fold
 | 默认只留一个按钮 | 开 |
 | 按钮显示文字 | 关 |
 | 输入框可拖动调高 / 输入框高度 | 开 / 336 |
+| 右侧栏占比 | 45%（30–70%） |
 
 ### 打印与导出
 
 - **打印 / 另存为 PDF 时会自动展开**：浏览器打印（`Ctrl + P`）前，消息与步骤的折叠全部展开，折叠控件本身也不会印到纸上——纸面上不留折叠的痕迹。
 - **会话日志导出不受影响**：`/export` 那一类导出读的是会话记录、不是页面，所以本来就包含全部内容，折叠从来不会让它丢东西。
+
+### 右侧栏占比
+
+- **在设置里选占比**：`设置 → 插件 → UI 美化` 或 `Ctrl + Shift + ,` 面板里的「右侧栏占比 (%)」，范围 30–70%，默认 45%（宿主自己的默认值）。
+- **拖动手柄自动同步**：手动拖动右栏左边缘调宽时，设置里的百分比会跟着更新。
+- **下次打开保持**：百分比存在插件设置里，重启后按它恢复（宿主本身每次会重置回 45%，插件在启动时帮你设回你选的值）。
 
 ### 搜索（右侧栏「查找」tab）
 

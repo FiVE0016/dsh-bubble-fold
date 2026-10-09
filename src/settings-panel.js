@@ -63,7 +63,7 @@ export function createPanel(React, api) {
     const [settings, setSettings] = React.useState(() => api.settings())
     React.useEffect(() => api.subscribe(() => setSettings(api.settings())), [])
     if (!settings) {
-      return h('div', { 'data-lf-setting-empty': '1' }, '气泡折叠未启动。')
+      return h('div', { 'data-lf-setting-empty': '1' }, 'UI 美化未启动。')
     }
     const patch = (part) => api.update(part)
     const toggle = (key, label, hint) => h(Row, { label, hint }, h(Toggle, {
@@ -96,6 +96,20 @@ export function createPanel(React, api) {
       toggle('mergeByDefault', '默认只留一个按钮', '每轮回复上方只显示「展开全部」；点开才摊开各条折叠缝，内容仍收起。'),
       toggle('stepLabels', '按钮显示文字', '开：三个按钮各带「展开全部 / 展开所有步骤 / 展开本步骤」文字；关：只留三个不同的箭头图标。'),
       toggle('composerResize', '输入框可拖动调高', '在输入框卡片顶部显示一条拖拽手柄。'),
+      h(Row, {
+        label: '右侧栏占比 (%)',
+        hint: (() => {
+          const rb = api.rightbar?.()
+          if (rb && !rb.supported) return '当前宿主不支持程序化调宽；仍可拖动右栏手柄，拖动会同步回这个数字。'
+          return '拖动右栏手柄会同步这个数字；下次打开保持。'
+        })()
+      }, h(NumberBox, {
+        value: settings.rightbarRatio,
+        min: 30,
+        max: 70,
+        suffix: '%',
+        onChange: (value) => api.setRightbarRatio(value)
+      })),
       h(Row, {
         label: '输入框高度',
         hint: composer

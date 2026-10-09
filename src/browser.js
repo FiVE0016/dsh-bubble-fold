@@ -1920,8 +1920,8 @@ export function start(win, React) {
     panel.setAttribute('data-lf-panel', '1')
 
     const title = doc.createElement('h4')
-    // 用户消息是气泡，助手回复是正文块，统称"消息"才不会误导。
-    title.textContent = '消息与步骤折叠'
+    // 折叠只是这个插件最早的功能；现在它顺带接管输入框、步骤、右栏宽度与查找。
+    title.textContent = 'UI 美化'
     panel.appendChild(title)
 
     const row = (labelText, control) => {
@@ -1977,6 +1977,25 @@ export function start(win, React) {
     row('默认只留一个按钮', checkbox('mergeByDefault'))
     row('按钮显示文字', checkbox('stepLabels'))
     row('输入框可拖动调高', checkbox('composerResize'))
+
+    // 右侧栏宽度：百分比存进设置（重启后保持），像素由宿主 layout store 管。
+    // 这里提交时把值交给 win.rightbar 去同时改设置和宿主宽度；拖动宿主手柄时，
+    // 宿主 store 的变化又通过控制器写回这个百分比，两边始终一致。
+    const ratioInput = doc.createElement('input')
+    ratioInput.type = 'number'
+    ratioInput.min = String(F.LIMITS.minRightbarRatio)
+    ratioInput.max = String(F.LIMITS.maxRightbarRatio)
+    ratioInput.value = String(settings.rightbarRatio)
+    ratioInput.setAttribute('data-lf-key', 'rightbarRatio')
+    ratioInput.addEventListener('change', () => {
+      const parsed = Number.parseInt(ratioInput.value, 10)
+      if (!Number.isFinite(parsed)) {
+        ratioInput.value = String(settings.rightbarRatio)
+        return
+      }
+      win.rightbar?.setRatio?.(parsed)
+    })
+    row('右侧栏占比 (%)', ratioInput)
 
     // The composer height is not a plugin setting: it drives the host's own CSS
     // variable, so it gets its own control rather than the settings schema.
