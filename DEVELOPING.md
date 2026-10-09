@@ -8,7 +8,7 @@
 
 ```
 web boot: 1 entry did not activate
-dsh-bubble-fold: failed
+dsh-ui-beautify: failed
 ```
 
 诊断日志：`%APPDATA%\@deepseek-ai\dsh-desktop\logs\crash-<时间>-web-boot.log`。
@@ -56,7 +56,7 @@ dsh-bubble-fold: failed
 
 ## 宿主设置页
 
-插件注册一个 `settings.plugins.tab` 贡献（`id: "bubble-fold", order: 20, label: "气泡折叠"`）：在 **设置 → 插件** 页与内置"全部"tab 并列。宿主只画 tab 条与外壳，页面内容由 `src/settings-panel.js` 的 React 组件（纯 `createElement`，无 JSX）绘制；组件通过注册项的 `inject: () => ({ api })` 拿到 `{ settings(), update(patch), subscribe(fn) }`，与 DOM 层控制器写通。控制器 `subscribe` 是浮层面板与设置页双向同步的通道。`apply(ctx)` 里若 `ctx.slots` 缺失（旧宿主）则整体跳过注册，折叠功能不受影响；`inject: ['slots']` 是为此新增的唯一依赖声明。面板样式在插件自己的样式表里，且**不套 `[data-dsh-bubble-fold]` 作用域**——插件被自己的开关关掉时，设置页仍要能正常显示并把它开回来。
+插件注册一个 `settings.plugins.tab` 贡献（`id: "bubble-fold", order: 20, label: "气泡折叠"`）：在 **设置 → 插件** 页与内置"全部"tab 并列。宿主只画 tab 条与外壳，页面内容由 `src/settings-panel.js` 的 React 组件（纯 `createElement`，无 JSX）绘制；组件通过注册项的 `inject: () => ({ api })` 拿到 `{ settings(), update(patch), subscribe(fn) }`，与 DOM 层控制器写通。控制器 `subscribe` 是浮层面板与设置页双向同步的通道。`apply(ctx)` 里若 `ctx.slots` 缺失（旧宿主）则整体跳过注册，折叠功能不受影响；`inject: ['slots']` 是为此新增的唯一依赖声明。面板样式在插件自己的样式表里，且**不套 `[data-dsh-ui-beautify]` 作用域**——插件被自己的开关关掉时，设置页仍要能正常显示并把它开回来。
 
 ## 右侧栏「查找」
 
@@ -203,7 +203,7 @@ node test/visual-check.mjs        # 真实 Chrome 渲染检查（需要本机 Ch
 
 ### 三个已经踩过的坑
 
-1. **`index.js` 必须能被 `import()` 解析。** 它是 ESM 入口，宿主用裸 `import()` 加载。0.1.0–0.1.3 在这里失败过：文件开头写成了 Python 风格的 `#` 注释 —— 第一行被 Node 当成 shebang 跳过，第三行直接是语法错误，于是宿主报 `bubble-fold (dsh-bubble-fold): failed to import`，宿主半不存在 → 客户端 bundle 也就永远不会被执行。改完务必跑一次导入自检：
+1. **`index.js` 必须能被 `import()` 解析。** 它是 ESM 入口，宿主用裸 `import()` 加载。0.1.0–0.1.3 在这里失败过：文件开头写成了 Python 风格的 `#` 注释 —— 第一行被 Node 当成 shebang 跳过，第三行直接是语法错误，于是宿主报 `bubble-fold (dsh-ui-beautify): failed to import`，宿主半不存在 → 客户端 bundle 也就永远不会被执行。改完务必跑一次导入自检：
 
    ```sh
    node -e "import('./index.js').then(m=>console.log('OK',Object.keys(m)))"
@@ -218,7 +218,7 @@ node test/visual-check.mjs        # 真实 Chrome 渲染检查（需要本机 Ch
    `build.mjs` 在 IIFE 作用域上提供了自己的 `require`（先查本地模块表，兜不住才落到宿主）。一旦写成 `factory: (require) => {…}`，这个参数会遮蔽包内的 `require`，于是 `require('./src/browser.js')` 跑到宿主模块表里去要，直接炸：
 
    ```
-   dsh-bubble-fold: import failed: client-modules: require("./src/browser.js") missed the module table
+   dsh-ui-beautify: import failed: client-modules: require("./src/browser.js") missed the module table
    ```
 
    桌面端会把它显示成「应用无法启动」对话框（0.1.5 的现象）。正确写法是 `factory: () => {…}`。`test/runtime.test.mjs` 用**只认 `react` 的严格替身**调用 factory，这类遮蔽会被测试直接抓住。

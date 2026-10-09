@@ -61,22 +61,22 @@ const TIE_LABEL = Object.freeze({
 
 const CSS = `
 /* The clamp wrapper inherits the bubble's own alignment so wrapping never moves it. */
-:root[data-dsh-bubble-fold] [data-lf-body] {
+:root[data-dsh-ui-beautify] [data-lf-body] {
   position: relative !important;
   display: flex !important;
   flex-direction: column !important;
   max-width: 100% !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-body="user"] {
+:root[data-dsh-ui-beautify] [data-lf-body="user"] {
   align-items: flex-end !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-body="assistant"] {
+:root[data-dsh-ui-beautify] [data-lf-body="assistant"] {
   display: flex !important;
   flex-direction: column !important;
   align-items: flex-start !important;
   width: 100% !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-clamped="1"] {
+:root[data-dsh-ui-beautify] [data-lf-clamped="1"] {
   display: block !important;
   /* Clipped, NOT scrollable. A scroll container here turned a passing wheel into
      "the reader wants the rest" and expanded messages nobody asked to open. The
@@ -91,12 +91,12 @@ const CSS = `
   padding-bottom: 0 !important;
   transition: max-height .18s ease !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-clamped="1"][data-lf-open="1"] {
+:root[data-dsh-ui-beautify] [data-lf-clamped="1"][data-lf-open="1"] {
   max-height: none !important;
 }
 /* The message control is a bubble-styled capsule: rounded, softly elevated,
    with a chevron that flips between the collapsed and open states. */
-:root[data-dsh-bubble-fold] [data-lf-toggle] {
+:root[data-dsh-ui-beautify] [data-lf-toggle] {
   display: inline-flex !important;
   align-items: center !important;
   gap: 4px !important;
@@ -116,23 +116,23 @@ const CSS = `
   z-index: 2 !important;
   box-shadow: 0 1px 5px rgba(15, 23, 42, .1) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-toggle] svg {
+:root[data-dsh-ui-beautify] [data-lf-toggle] svg {
   width: 13px !important;
   height: 13px !important;
   flex: none !important;
   transition: transform .15s ease !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-toggle][aria-expanded="true"] svg {
+:root[data-dsh-ui-beautify] [data-lf-toggle][aria-expanded="true"] svg {
   transform: rotate(180deg) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-toggle]:hover {
+:root[data-dsh-ui-beautify] [data-lf-toggle]:hover {
   color: var(--dsw-alias-label-primary, #1f2328) !important;
   background: var(--dsw-alias-interactive-bg-hover, rgba(15, 23, 42, .05)) !important;
 }
 /* One control row sits under each folded message it acts on. The gap above it is
    the "间距" setting — the row is in normal flow, never pulled back over the
    message, so it cannot cover the last visible line. */
-:root[data-dsh-bubble-fold] [data-lf-tail] {
+:root[data-dsh-ui-beautify] [data-lf-tail] {
   display: flex !important;
   align-items: center !important;
   flex-wrap: wrap !important;
@@ -141,18 +141,18 @@ const CSS = `
 }
 /* The row must be allowed to exceed the bubble: the capsule does not fit inside
    a 70%-wide bubble, and squeezing it there overlaps the bubble's own edge. */
-:root[data-dsh-bubble-fold] [data-lf-body] + [data-lf-tail] {
+:root[data-dsh-ui-beautify] [data-lf-body] + [data-lf-tail] {
   width: 100% !important;
   max-width: none !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-tail="user"] {
+:root[data-dsh-ui-beautify] [data-lf-tail="user"] {
   justify-content: flex-end !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-tail="assistant"] {
+:root[data-dsh-ui-beautify] [data-lf-tail="assistant"] {
   justify-content: flex-start !important;
 }
 /* display would beat the hidden attribute, so restate it */
-:root[data-dsh-bubble-fold] [data-lf-tail][hidden] {
+:root[data-dsh-ui-beautify] [data-lf-tail][hidden] {
   display: none !important;
 }
 /* The work-step fold: ONE seam per process block, sitting between the run of
@@ -161,7 +161,7 @@ const CSS = `
    mirrors the host's own data-open. The seam is a LINE: the hairline runs
    through it and the controls ride on it, which is what lets a Turn's last seam
    carry a second, Turn-wide control without moving anything else. */
-:root[data-dsh-bubble-fold] [data-lf-step-line] {
+:root[data-dsh-ui-beautify] [data-lf-step-line] {
   display: flex !important;
   align-items: center !important;
   gap: 8px !important;
@@ -170,8 +170,8 @@ const CSS = `
   margin: 2px 0 !important;
 }
 /* The hairlines turn the line into the seam that separates steps from reply. */
-:root[data-dsh-bubble-fold] [data-lf-step-line]::before,
-:root[data-dsh-bubble-fold] [data-lf-step-line]::after {
+:root[data-dsh-ui-beautify] [data-lf-step-line]::before,
+:root[data-dsh-ui-beautify] [data-lf-step-line]::after {
   content: "" !important;
   flex: 1 1 auto !important;
   height: 1px !important;
@@ -182,9 +182,9 @@ const CSS = `
    with the text off the icon holder IS the circle; with the text on the BUTTON
    is the pill and the icon holder drops its own chrome — the nesting (a bordered
    circle inside a bordered pill) was the "button inside a button" look. */
-:root[data-dsh-bubble-fold] [data-lf-step-toggle],
-:root[data-dsh-bubble-fold] [data-lf-step-all],
-:root[data-dsh-bubble-fold] [data-lf-step-every] {
+:root[data-dsh-ui-beautify] [data-lf-step-toggle],
+:root[data-dsh-ui-beautify] [data-lf-step-all],
+:root[data-dsh-ui-beautify] [data-lf-step-every] {
   display: inline-flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -207,7 +207,7 @@ const CSS = `
   transition: color .12s ease, background-color .12s ease !important;
 }
 /* Icon-only mode: the holder is the circle. */
-:root[data-dsh-bubble-fold] [data-lf-icon] {
+:root[data-dsh-ui-beautify] [data-lf-icon] {
   flex: none !important;
   width: 26px !important;
   height: 26px !important;
@@ -220,44 +220,44 @@ const CSS = `
   box-shadow: 0 2px 8px rgba(15, 23, 42, .14) !important;
   transition: color .12s ease, background-color .12s ease, box-shadow .12s ease, transform .12s ease !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-icon] svg {
+:root[data-dsh-ui-beautify] [data-lf-icon] svg {
   width: 14px !important;
   height: 14px !important;
   flex: none !important;
   transition: transform .15s ease !important;
 }
 /* A control that reports "open" flips its own glyph. */
-:root[data-dsh-bubble-fold] [data-lf-step-toggle][data-lf-step-open="1"] [data-lf-icon] svg,
-:root[data-dsh-bubble-fold] [data-lf-step-all][data-lf-all-open="1"] [data-lf-icon] svg,
-:root[data-dsh-bubble-fold] [data-lf-step-every][data-lf-every-open="1"] [data-lf-icon] svg {
+:root[data-dsh-ui-beautify] [data-lf-step-toggle][data-lf-step-open="1"] [data-lf-icon] svg,
+:root[data-dsh-ui-beautify] [data-lf-step-all][data-lf-all-open="1"] [data-lf-icon] svg,
+:root[data-dsh-ui-beautify] [data-lf-step-every][data-lf-every-open="1"] [data-lf-icon] svg {
   transform: rotate(180deg) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-step-toggle]:hover [data-lf-icon],
-:root[data-dsh-bubble-fold] [data-lf-step-all]:hover [data-lf-icon],
-:root[data-dsh-bubble-fold] [data-lf-step-every]:hover [data-lf-icon] {
+:root[data-dsh-ui-beautify] [data-lf-step-toggle]:hover [data-lf-icon],
+:root[data-dsh-ui-beautify] [data-lf-step-all]:hover [data-lf-icon],
+:root[data-dsh-ui-beautify] [data-lf-step-every]:hover [data-lf-icon] {
   color: var(--dsw-alias-label-primary, #1f2328) !important;
   background: var(--dsw-alias-interactive-bg-hover, rgba(15, 23, 42, .05)) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-step-toggle]:hover [data-lf-icon] {
+:root[data-dsh-ui-beautify] [data-lf-step-toggle]:hover [data-lf-icon] {
   transform: scale(1.08) !important;
 }
 /* Text mode: the button carries the pill, the holder becomes a bare icon. */
-:root[data-dsh-bubble-fold] [data-lf-step-toggle][data-lf-text="1"],
-:root[data-dsh-bubble-fold] [data-lf-step-all][data-lf-text="1"],
-:root[data-dsh-bubble-fold] [data-lf-step-every][data-lf-text="1"] {
+:root[data-dsh-ui-beautify] [data-lf-step-toggle][data-lf-text="1"],
+:root[data-dsh-ui-beautify] [data-lf-step-all][data-lf-text="1"],
+:root[data-dsh-ui-beautify] [data-lf-step-every][data-lf-text="1"] {
   height: 24px !important;
   padding: 0 10px 0 5px !important;
   border: 1px solid var(--dsw-alias-border-l2, rgba(15, 23, 42, .12)) !important;
   background: var(--dsw-alias-bg-base, #fff) !important;
   box-shadow: 0 1px 4px rgba(15, 23, 42, .08) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-step-toggle][data-lf-text="1"]:hover,
-:root[data-dsh-bubble-fold] [data-lf-step-all][data-lf-text="1"]:hover,
-:root[data-dsh-bubble-fold] [data-lf-step-every][data-lf-text="1"]:hover {
+:root[data-dsh-ui-beautify] [data-lf-step-toggle][data-lf-text="1"]:hover,
+:root[data-dsh-ui-beautify] [data-lf-step-all][data-lf-text="1"]:hover,
+:root[data-dsh-ui-beautify] [data-lf-step-every][data-lf-text="1"]:hover {
   color: var(--dsw-alias-label-primary, #1f2328) !important;
   background: var(--dsw-alias-interactive-bg-hover, rgba(15, 23, 42, .05)) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-text="1"] [data-lf-icon] {
+:root[data-dsh-ui-beautify] [data-lf-text="1"] [data-lf-icon] {
   width: 16px !important;
   height: 16px !important;
   border: none !important;
@@ -266,25 +266,25 @@ const CSS = `
   transform: none !important;
 }
 /* The text itself: shown only while the setting asks for it. */
-:root[data-dsh-bubble-fold] [data-lf-step-label],
-:root[data-dsh-bubble-fold] [data-lf-all-label],
-:root[data-dsh-bubble-fold] [data-lf-every-label] {
+:root[data-dsh-ui-beautify] [data-lf-step-label],
+:root[data-dsh-ui-beautify] [data-lf-all-label],
+:root[data-dsh-ui-beautify] [data-lf-every-label] {
   display: none !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-step-toggle][data-lf-text="1"] [data-lf-step-label],
-:root[data-dsh-bubble-fold] [data-lf-step-all][data-lf-text="1"] [data-lf-all-label],
-:root[data-dsh-bubble-fold] [data-lf-step-every][data-lf-text="1"] [data-lf-every-label] {
+:root[data-dsh-ui-beautify] [data-lf-step-toggle][data-lf-text="1"] [data-lf-step-label],
+:root[data-dsh-ui-beautify] [data-lf-step-all][data-lf-text="1"] [data-lf-all-label],
+:root[data-dsh-ui-beautify] [data-lf-step-every][data-lf-text="1"] [data-lf-every-label] {
   display: inline !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-step-line]:hover::before,
-:root[data-dsh-bubble-fold] [data-lf-step-line]:hover::after {
+:root[data-dsh-ui-beautify] [data-lf-step-line]:hover::before,
+:root[data-dsh-ui-beautify] [data-lf-step-line]:hover::after {
   background: var(--dsw-alias-border-l2, rgba(15, 23, 42, .22)) !important;
 }
 /* display would beat the hidden attribute, so restate it for every control */
-:root[data-dsh-bubble-fold] [data-lf-step-line][hidden],
-:root[data-dsh-bubble-fold] [data-lf-step-toggle][hidden],
-:root[data-dsh-bubble-fold] [data-lf-step-all][hidden],
-:root[data-dsh-bubble-fold] [data-lf-step-every][hidden] {
+:root[data-dsh-ui-beautify] [data-lf-step-line][hidden],
+:root[data-dsh-ui-beautify] [data-lf-step-toggle][hidden],
+:root[data-dsh-ui-beautify] [data-lf-step-all][hidden],
+:root[data-dsh-ui-beautify] [data-lf-step-every][hidden] {
   display: none !important;
 }
 /* Rows the plugin folded itself, for a block the host refuses to fold. They are
@@ -292,21 +292,21 @@ const CSS = `
    them: it matches the text, fires beforematch, and the seam opens the block.
    The attribute is set in JS; this rule keeps browsers that map hidden to
    display:none on the same footing. */
-:root[data-dsh-bubble-fold] [data-lf-step-folded] {
+:root[data-dsh-ui-beautify] [data-lf-step-folded] {
   content-visibility: hidden !important;
 }
 @supports not (content-visibility: hidden) {
-  :root[data-dsh-bubble-fold] [data-lf-step-folded] {
+  :root[data-dsh-ui-beautify] [data-lf-step-folded] {
     display: none !important;
   }
 }
-:root[data-dsh-bubble-fold] [data-lf-toggle]:disabled {
+:root[data-dsh-ui-beautify] [data-lf-toggle]:disabled {
   opacity: .35 !important;
   cursor: default !important;
 }
 /* Drag handle for the composer height. Purely additive: no transition on the
    drag itself, so the resize cannot flicker. */
-:root[data-dsh-bubble-fold] [data-lf-composer-handle] {
+:root[data-dsh-ui-beautify] [data-lf-composer-handle] {
   /* The order property pins the handle to the top of the card's flex column
      regardless of where a host re-render would move it in the child list. */
   order: -1 !important;
@@ -319,7 +319,7 @@ const CSS = `
   user-select: none !important;
   touch-action: none !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-composer-handle]:after {
+:root[data-dsh-ui-beautify] [data-lf-composer-handle]:after {
   content: "" !important;
   position: absolute !important;
   left: 50% !important;
@@ -331,22 +331,22 @@ const CSS = `
   background: var(--dsw-alias-border-l2, rgba(15, 23, 42, .3)) !important;
   transition: background-color .12s ease !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-composer-handle]:hover {
+:root[data-dsh-ui-beautify] [data-lf-composer-handle]:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(15, 23, 42, .05)) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-composer-handle]:hover:after,
-:root[data-dsh-bubble-fold] [data-lf-composer-handle][data-dragging]:after {
+:root[data-dsh-ui-beautify] [data-lf-composer-handle]:hover:after,
+:root[data-dsh-ui-beautify] [data-lf-composer-handle][data-dragging]:after {
   background: var(--dsw-alias-state-business-primary, #4f6ef7) !important;
 }
 /* A settings dialog is user-invoked and dismissible — never a standing overlay
    hovering above the composer. */
-:root[data-dsh-bubble-fold] [data-lf-scrim] {
+:root[data-dsh-ui-beautify] [data-lf-scrim] {
   position: fixed !important;
   inset: 0 !important;
   z-index: 59 !important;
   background: rgba(15, 23, 42, .28) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-panel] {
+:root[data-dsh-ui-beautify] [data-lf-panel] {
   position: fixed !important;
   top: 50% !important;
   left: 50% !important;
@@ -363,19 +363,19 @@ const CSS = `
   font-size: 13px !important;
   text-align: left !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-panel] h4 {
+:root[data-dsh-ui-beautify] [data-lf-panel] h4 {
   margin: 0 0 8px !important;
   font-size: 13px !important;
   font-weight: 600 !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-panel] label {
+:root[data-dsh-ui-beautify] [data-lf-panel] label {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
   gap: 10px !important;
   padding: 3px 0 !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-panel] input[type="number"] {
+:root[data-dsh-ui-beautify] [data-lf-panel] input[type="number"] {
   width: 64px !important;
   box-sizing: border-box !important;
   padding: 2px 6px !important;
@@ -385,7 +385,7 @@ const CSS = `
   color: inherit !important;
   font: inherit !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-panel] footer {
+:root[data-dsh-ui-beautify] [data-lf-panel] footer {
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
@@ -394,7 +394,7 @@ const CSS = `
   padding-top: 8px !important;
   border-top: 1px solid var(--dsw-alias-border-l1, rgba(15, 23, 42, .08)) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-panel] button {
+:root[data-dsh-ui-beautify] [data-lf-panel] button {
   appearance: none !important;
   border: 1px solid var(--dsw-alias-border-l2, rgba(15, 23, 42, .12)) !important;
   background: transparent !important;
@@ -404,10 +404,10 @@ const CSS = `
   border-radius: 999px !important;
   cursor: pointer !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-panel] button:hover {
+:root[data-dsh-ui-beautify] [data-lf-panel] button:hover {
   background: var(--dsw-alias-interactive-bg-hover, rgba(15, 23, 42, .05)) !important;
 }
-:root[data-dsh-bubble-fold] [data-lf-panel] [data-lf-hint] {
+:root[data-dsh-ui-beautify] [data-lf-panel] [data-lf-hint] {
   color: var(--dsw-alias-label-tertiary, #8b93a1) !important;
   font-size: 12px !important;
   line-height: 16px !important;
@@ -418,29 +418,29 @@ const CSS = `
    recalc still lands — and drop every control that only makes sense while
    interacting. */
 @media print {
-  :root[data-dsh-bubble-fold] [data-lf-clamped="1"] {
+  :root[data-dsh-ui-beautify] [data-lf-clamped="1"] {
     max-height: none !important;
     padding-bottom: 0 !important;
     margin-bottom: 0 !important;
   }
-  :root[data-dsh-bubble-fold] [data-lf-clamped="1"]:not([data-lf-open="1"]):after {
+  :root[data-dsh-ui-beautify] [data-lf-clamped="1"]:not([data-lf-open="1"]):after {
     content: none !important;
   }
   /* A host group that folds with hidden="until-found" keeps its rows in the DOM,
      but Chromium still lays it out as display:none — paper needs both overrides.
      Scoped to the step rows so an unrelated closed menu can never print open. */
-  :root[data-dsh-bubble-fold] [data-step-process] [hidden="until-found"],
-  :root[data-dsh-bubble-fold] [data-turn-process-member][hidden="until-found"],
-  :root[data-dsh-bubble-fold] [data-turn-process][hidden="until-found"] {
+  :root[data-dsh-ui-beautify] [data-step-process] [hidden="until-found"],
+  :root[data-dsh-ui-beautify] [data-turn-process-member][hidden="until-found"],
+  :root[data-dsh-ui-beautify] [data-turn-process][hidden="until-found"] {
     display: revert !important;
     content-visibility: visible !important;
   }
-  :root[data-dsh-bubble-fold] [data-lf-toggle],
-  :root[data-dsh-bubble-fold] [data-lf-tail],
-  :root[data-dsh-bubble-fold] [data-lf-step-line],
-  :root[data-dsh-bubble-fold] [data-lf-composer-handle],
-  :root[data-dsh-bubble-fold] [data-lf-panel],
-  :root[data-dsh-bubble-fold] [data-lf-scrim] {
+  :root[data-dsh-ui-beautify] [data-lf-toggle],
+  :root[data-dsh-ui-beautify] [data-lf-tail],
+  :root[data-dsh-ui-beautify] [data-lf-step-line],
+  :root[data-dsh-ui-beautify] [data-lf-composer-handle],
+  :root[data-dsh-ui-beautify] [data-lf-panel],
+  :root[data-dsh-ui-beautify] [data-lf-scrim] {
     display: none !important;
   }
 }
@@ -646,7 +646,7 @@ export function start(win, React) {
   if (!doc || !doc.documentElement) return { dispose() {} }
 
   const F = win.__DSH_BUBBLE_FOLD_MODULES__?.fold
-  if (!F) throw new Error('[dsh-bubble-fold] fold module missing from bundle')
+  if (!F) throw new Error('[dsh-ui-beautify] fold module missing from bundle')
 
   const computedStyleOf = win.getComputedStyle.bind(win)
 

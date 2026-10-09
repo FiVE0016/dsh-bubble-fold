@@ -2,6 +2,7 @@
 
 ## 0.9.3 — 2026-10-09
 
+- **改名**：npm 包名与 GitHub 仓库 `dsh-bubble-fold` → **`dsh-ui-beautify`**（显示名「UI 美化」）。同步改了`cordis.patch.yml` 的 `name`、`index.js` 的导出名、模块加载 id、日志前缀与 README/徽章/安装命令；**保留**设置存储键、根属性 `data-dsh-bubble-fold`、样式标签 id、右栏 tab 内部 id 与调试句柄（旧句柄加新别名），所以升级不重置设置。旧包标记 deprecated 指向新包。
 - 介绍与关键词更新：`description` 覆盖现在的完整功能（折叠、输入框、右侧栏占比、查找），关键词补上 ui / beautify / sidebar / composer / search，让 npm 页面与插件列表不再只讲折叠。
 
 ## 0.9.2 — 2026-10-09

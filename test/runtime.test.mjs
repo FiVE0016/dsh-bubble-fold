@@ -1431,7 +1431,7 @@ console.log('bundled artifact (client.js)')
   test('bundle registers itself under the package name', () => {
     const run = new Function('window', 'require', source)
     run(bundleWindow, undefined)
-    assert.equal(loader.registration?.id, 'dsh-bubble-fold')
+    assert.equal(loader.registration?.id, 'dsh-ui-beautify')
   })
   test('bundle contains no stray export syntax', () => {
     assert.equal(/^\s*export\s/m.test(source), false)
