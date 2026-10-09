@@ -151,6 +151,27 @@ if (dom.bodies === 0) {
     dom = await readDom()
   }
   console.log(`  扫描稳定后: bodies=${dom.bodies} clamped=${dom.clamped} seams=${dom.seams}`)
+
+  // Older messages only become visible — and therefore scanned — after scrolling
+  // back through history: the host renders lazily and the plugin measures what is
+  // near the viewport. Walk up through the history until a clamped bubble shows up.
+  if (dom.clamped === 0) {
+    for (const fraction of [0.5, 0.25, 0.05, 0]) {
+      const moved = await evaluate(`(() => {
+        const scroller = [...document.querySelectorAll('*')]
+          .filter((el) => el.scrollHeight > el.clientHeight + 200 && getComputedStyle(el).overflowY !== 'visible')
+          .sort((a, b) => b.scrollHeight - a.scrollHeight)[0]
+        if (!scroller) return null
+        scroller.scrollTop = scroller.scrollHeight * ${fraction}
+        return { top: Math.round(scroller.scrollTop), height: scroller.scrollHeight }
+      })()`)
+      if (!moved) break
+      await sleep(2500)
+      dom = await readDom()
+      if (dom.clamped > 0) break
+    }
+    console.log(`  滚动历史后: bodies=${dom.bodies} clamped=${dom.clamped}`)
+  }
 }
 console.log('  ' + JSON.stringify(dom))
 
@@ -202,25 +223,48 @@ check('打印媒体下不再折叠', print.stillClamped === 0, `stillClamped=${p
 check('打印媒体下控件隐藏', print.controlsVisible === 0, `visible=${print.controlsVisible}`)
 
 console.log('\n=== 4. 右栏宽度 ===')
-const rightbar = await evaluate('window.__DSH_UI_BEAUTIFY__?.rightbar() ?? null')
-console.log('  ' + JSON.stringify(rightbar))
-const collapsed = await evaluate(`(() => {
+const readFrame = () => evaluate(`(() => {
   const frame = [...document.querySelectorAll('div[style]')].find((el) => el.style && el.style.gridTemplateColumns)
   return {
     collapsed: frame ? frame.hasAttribute('data-rightbar-collapsed') : null,
     fullscreen: frame ? frame.hasAttribute('data-rightbar-fullscreen') : null,
     tracks: frame ? frame.style.gridTemplateColumns : null,
-    forced: frame ? frame.hasAttribute('data-lf-frame') : null
+    forced: frame ? frame.hasAttribute('data-lf-frame') : null,
+    thirdTrack: frame ? (frame.style.gridTemplateColumns.match(/minmax\\(0px, ([\\d.]+)px\\)/) ?? [])[1] : null
   }
 })()`)
-console.log('  ' + JSON.stringify(collapsed))
-if (collapsed.collapsed === true) {
-  check('收起时没有占着那一列', collapsed.forced === false, collapsed.forced ? '仍在强制宽度（会导致主区域不回弹）' : '已释放')
-  check('右栏宽度读数', null, '右栏当前是收起的，打开右栏后再跑可校验占比')
+const clickByLabel = (label) => evaluate(`(() => {
+  const el = [...document.querySelectorAll('button')].find((b) => (b.getAttribute('aria-label') || '') === ${JSON.stringify(label)})
+  if (!el) return false
+  el.click()
+  return true
+})()`)
+
+const beforeOpen = await readFrame()
+console.log('  ' + JSON.stringify(beforeOpen))
+check('收起时没有占着那一列', beforeOpen.forced === false, beforeOpen.forced ? '仍在强制宽度' : '已释放')
+
+const opened = await clickByLabel('打开右侧边栏')
+if (!opened) {
+  check('打开右栏并校验宽度', null, '没找到「打开右侧边栏」按钮（宿主改版了？）')
 } else {
-  check('右栏显示时强制了设定宽度', collapsed.forced === true, `tracks=${collapsed.tracks}`)
+  await sleep(3000)
+  const open = await readFrame()
+  const rightbar = await evaluate('window.__DSH_UI_BEAUTIFY__?.rightbar() ?? null')
+  console.log('  ' + JSON.stringify({ ...open, ...rightbar }))
+  check('右栏显示时强制了设定宽度', open.forced === true, `tracks=${open.tracks}`)
   check('实际渲染宽度等于设置', rightbar?.ratio !== null && Math.abs((rightbar?.ratio ?? 0) - (rightbar?.renderedRatio ?? -1)) <= 2,
     `ratio=${rightbar?.ratio} rendered=${rightbar?.renderedRatio}`)
+
+  // Closing is the regression that once left the conversation stuck at half width:
+  // a forced `!important` column has to be released the moment the host closes.
+  const closed = await clickByLabel('收起右侧边栏')
+  await sleep(2500)
+  const after = await readFrame()
+  console.log('  ' + JSON.stringify(after))
+  check('收起后释放那一列（会话区回弹）',
+    closed === true && after.forced === false && /minmax\(0px, 0px\)/.test(after.tracks ?? ''),
+    `forced=${after.forced} tracks=${after.tracks}`)
 }
 
 console.log('\n=== 5. 控制台报错 ===')
