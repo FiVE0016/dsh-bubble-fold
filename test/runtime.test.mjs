@@ -251,10 +251,12 @@ function buildFixture() {
   }
 
   // user input: anchor > userRow > userStack > bubble
-  const user = (attrs = {}, height = 480) => {
+  const user = (attrs = {}, height = 480, attachment = false) => {
     const anchor = flowItem({ 'data-chat-flow-kind': 'user', 'data-chat-anchor-key': 'user:1', ...attrs })
     const row = anchor.appendChild(new FakeElement('div'))
     const stack = row.appendChild(new FakeElement('div'))
+    // The host renders attachments as a sibling BEFORE the text bubble.
+    if (attachment) stack.appendChild(new FakeElement('div', { 'data-message-attachments': 'true' }))
     const bubble = stack.appendChild(new FakeElement('div'))
     bubble.scrollHeight = height
     bubble.rectHeight = height
@@ -1124,6 +1126,25 @@ console.log('default: each Turn shows one button until asked')
     controller.rescan()
     assert.equal(solo.control.hasAttribute('data-open'), true, 'its one block opened')
     assert.equal(primary.getAttribute('aria-label'), '收起全部')
+  })
+}
+
+console.log('a message with an attachment is never folded')
+{
+  const fixture = buildFixture()
+  // Same long body that folds on its own, but the row carries an image/file row.
+  const withImage = fixture.user({}, 900, true)
+  const plain = fixture.user({ 'data-chat-anchor-key': 'user:2' }, 900)
+  const { controller } = await boot(fixture)
+  controller.rescan()
+
+  test('the attachment message stays fully visible', () => {
+    assert.equal(withImage.bubble.hasAttribute('data-lf-clamped'), false, 'no clamp')
+    assert.equal(withImage.bubble.hasAttribute('data-lf-open'), false, 'and no open flag')
+    assert.equal(withImage.anchor.querySelector('[data-lf-tail]').hasAttribute('hidden'), true, 'no control row either')
+  })
+  test('an identical message without an attachment still folds', () => {
+    assert.equal(plain.bubble.getAttribute('data-lf-clamped'), '1', 'the rule is about attachments, not length')
   })
 }
 

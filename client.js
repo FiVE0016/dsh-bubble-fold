@@ -1661,6 +1661,18 @@
         const lineHeight = lineHeightOf(body)
         const limits = F.settingsForSide(settings, side)
         const lines = settings.collapseAll ? settings.collapsedLines : limits.lines
+        // A message carrying an image or a file is never folded. The host renders
+        // attachments as a sibling row before the text bubble ([data-message-attachments],
+        // verified in the host's own chat bundle), but text and picture belong
+        // together: clamping the text there hides exactly what the reader just sent.
+        // Matching the host's marker — not every <img>, which would also catch emoji —
+        // keeps the rule precise. A message with no text bubble at all never gets here.
+        if (anchor.querySelector('[data-message-attachments], [data-attachment]')) {
+          removeAttr(body, 'data-lf-clamped')
+          removeAttr(body, 'data-lf-open')
+          setAttr(record.tail, 'hidden', '')
+          return
+        }
         // The visible box is the line budget and nothing else: the control row below
         // it is real flow, separated by the "间距" gap, so no overlay and no fade are
         // needed to keep the last visible line readable.
