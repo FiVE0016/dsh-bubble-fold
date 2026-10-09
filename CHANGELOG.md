@@ -1,5 +1,9 @@
 # 更新记录
 
+## 0.9.4 — 2026-10-09
+
+- **修（严重）：改名改坏了样式。** 改名时把 `src/browser.js` 里所有 `dsh-bubble-fold` 一并替换，**包括 CSS 的作用域选择器** `:root[data-dsh-bubble-fold]`，而设置该属性的常量没动——于是插件的**整套 CSS 全部失效**，控件退化成浏览器默认样式（巨型灰块按钮）。现已把选择器改回，并补**两道防线**：① `test/entry.test.mjs` 静态比对"CSS 的 `:root[...]` 必须等于 `ROOT_ATTRIBUTE`"；② `test/visual-check.mjs` 在真实 Chrome 里断言样式**确实生效**（根属性、样式表存在、缝隙是 flex、图标容器 26×26 且圆角 50%）。这类"假 DOM 测试看不见"的漂移以后会被拦下。
+
 ## 0.9.3 — 2026-10-09
 
 - **改名**：npm 包名与 GitHub 仓库 `dsh-bubble-fold` → **`dsh-ui-beautify`**（显示名「UI 美化」）。同步改了`cordis.patch.yml` 的 `name`、`index.js` 的导出名、模块加载 id、日志前缀与 README/徽章/安装命令；**保留**设置存储键、根属性 `data-dsh-bubble-fold`、样式标签 id、右栏 tab 内部 id 与调试句柄（旧句柄加新别名），所以升级不重置设置。旧包标记 deprecated 指向新包。

@@ -424,6 +424,21 @@ test('a drag is adopted, and our own apply is not mistaken for one', async () =>
   assert.equal(win.__DSH_BUBBLE_FOLD__.rightbar().ratio, 60, '读回也是 60%')
 })
 
+test('the stylesheet selects exactly the root attribute the plugin sets', async () => {
+  // A rename once rewrote the CSS selectors but not the constant that sets the
+  // attribute, so every rule in the plugin silently stopped matching and the
+  // controls rendered as giant browser-default buttons. The unit suites cannot see
+  // that (their DOM does no CSS matching), so the two are compared here.
+  const fold = await readFile(path.join(here, '..', 'src', 'fold.js'), 'utf8')
+  const browser = await readFile(path.join(here, '..', 'src', 'browser.js'), 'utf8')
+  const declared = /ROOT_ATTRIBUTE = '([^']+)'/.exec(fold)?.[1]
+  assert.ok(declared, 'ROOT_ATTRIBUTE 应能从 fold.js 读出')
+  const used = [...new Set([...browser.matchAll(/:root\[(data-[a-z-]+)\]/g)].map((m) => m[1]))]
+  assert.deepEqual(used, [declared], 'CSS 的 :root[...] 作用域必须与 ROOT_ATTRIBUTE 完全一致')
+  const styleId = /STYLE_ID = '([^']+)'/.exec(fold)?.[1]
+  assert.ok(browser.includes('F.STYLE_ID') || browser.includes(styleId), '样式标签 id 应来自 STYLE_ID')
+})
+
 test('a host without panels.setRightbar degrades instead of throwing', () => {
   const { plugin, win } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36' })
   const ctx = {

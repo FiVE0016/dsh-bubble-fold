@@ -56,7 +56,7 @@ dsh-ui-beautify: failed
 
 ## 宿主设置页
 
-插件注册一个 `settings.plugins.tab` 贡献（`id: "bubble-fold", order: 20, label: "气泡折叠"`）：在 **设置 → 插件** 页与内置"全部"tab 并列。宿主只画 tab 条与外壳，页面内容由 `src/settings-panel.js` 的 React 组件（纯 `createElement`，无 JSX）绘制；组件通过注册项的 `inject: () => ({ api })` 拿到 `{ settings(), update(patch), subscribe(fn) }`，与 DOM 层控制器写通。控制器 `subscribe` 是浮层面板与设置页双向同步的通道。`apply(ctx)` 里若 `ctx.slots` 缺失（旧宿主）则整体跳过注册，折叠功能不受影响；`inject: ['slots']` 是为此新增的唯一依赖声明。面板样式在插件自己的样式表里，且**不套 `[data-dsh-ui-beautify]` 作用域**——插件被自己的开关关掉时，设置页仍要能正常显示并把它开回来。
+插件注册一个 `settings.plugins.tab` 贡献（`id: "bubble-fold", order: 20, label: "UI 美化"`）：在 **设置 → 插件** 页与内置"全部"tab 并列。宿主只画 tab 条与外壳，页面内容由 `src/settings-panel.js` 的 React 组件（纯 `createElement`，无 JSX）绘制；组件通过注册项的 `inject: () => ({ api })` 拿到 `{ settings(), update(patch), subscribe(fn) }`，与 DOM 层控制器写通。控制器 `subscribe` 是浮层面板与设置页双向同步的通道。`apply(ctx)` 里若 `ctx.slots` 缺失（旧宿主）则整体跳过注册，折叠功能不受影响；`inject: ['slots']` 是为此新增的唯一依赖声明。面板样式在插件自己的样式表里，且**不套 `[data-dsh-ui-beautify]` 作用域**——插件被自己的开关关掉时，设置页仍要能正常显示并把它开回来。
 
 ## 右侧栏「查找」
 

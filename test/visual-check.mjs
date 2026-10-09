@@ -272,6 +272,38 @@ console.log('states  :', JSON.stringify(await evaluate(`(async () => {
   return state
 })()`), null, 2))
 
+// The plugin's own stylesheet must actually be MATCHING. A rename once rewrote the
+// CSS selectors but not the attribute the plugin sets: every rule went dead and the
+// controls rendered as browser-default buttons — and no unit test could see it,
+// because a fake DOM does no CSS matching.
+console.log('style   :', JSON.stringify(await evaluate(`(() => {
+  const seam = document.querySelector('[data-lf-step-line]')
+  const icon = document.querySelector('[data-lf-step-all] [data-lf-icon]')
+  const toggle = document.querySelector('[data-lf-toggle]')
+  const rootAttribute = document.documentElement.getAttribute('data-dsh-bubble-fold')
+  const iconRect = icon ? icon.getBoundingClientRect() : null
+  const iconStyle = icon ? getComputedStyle(icon) : null
+  const out = {
+    rootAttribute,
+    styleTag: Boolean(document.getElementById('dsh-bubble-fold-styles')),
+    seamDisplay: seam ? getComputedStyle(seam).display : null,
+    iconSize: iconStyle ? iconStyle.width + ' x ' + iconStyle.height : null,
+    iconBox: iconRect ? Math.round(iconRect.width) + 'x' + Math.round(iconRect.height) : null,
+    iconRadius: iconStyle ? iconStyle.borderRadius : null,
+    toggleBorder: toggle ? getComputedStyle(toggle).borderTopWidth : null
+  }
+  const failures = []
+  if (rootAttribute !== 'on') failures.push('root attribute missing')
+  if (out.styleTag !== true) failures.push('stylesheet missing')
+  if (out.seamDisplay !== 'flex') failures.push('seam line not styled: ' + out.seamDisplay)
+  // Computed width/height, not the rect: the holder also carries a 1px border, so
+  // its box is 28px while its CSS size is 26px.
+  if (out.iconSize !== '26px x 26px') failures.push('icon holder not 26px: ' + out.iconSize)
+  if (out.iconRadius !== '50%') failures.push('icon holder not round: ' + out.iconRadius)
+  if (failures.length > 0) throw new Error('插件样式没有生效 — ' + failures.join('; '))
+  return out
+})()`), null, 2))
+
 // Ctrl+F has to reach folded content. window.find() runs the browser's own text
 // search — the same matching find-in-page does — so it answers "would the reader
 // find this text?", which is exactly what `display: none` used to break. The
