@@ -12,7 +12,6 @@
 // Only contract-level data-* attributes and structural descent are used; hashed
 // CSS-module class names never appear here, so a host restyle cannot break this.
 
-export const PLUGIN_ID = 'dsh-bubble-fold'
 export const ROOT_ATTRIBUTE = 'data-dsh-bubble-fold'
 export const STYLE_ID = 'dsh-bubble-fold-styles'
 export const STORAGE_KEY = 'dsh.bubble-fold.settings'

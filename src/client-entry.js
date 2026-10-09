@@ -168,22 +168,8 @@ window.__ModuleLoader__.load({
       // Until our stored value has been applied, observations must not overwrite it:
       // the host reports its own 45% default at startup, and writing that back would
       // silently replace the reader's choice before it ever reached the store.
-      let lastRatio = null
       /** The px our stylesheet rule is forcing right now (0 = no override in force). */
       let forcedPx = 0
-      /**
-       * `fromDrag` is the whole gate: only a REAL drag — an inline grid change the
-       * host's own handle made — may write back. Our own applies can land on a value
-       * the host renders differently, and writing THAT back silently replaced the
-       * reader's 50% with whatever the measurement happened to read.
-       */
-      const observe = (fromDrag = false) => {
-        const ratio = ratioNow()
-        if (ratio === null || ratio === lastRatio) return
-        lastRatio = ratio
-        if (!fromDrag) return
-        if (getSettings()?.rightbarRatio !== ratio) updateSettings({ rightbarRatio: ratio })
-      }
       /** Split "280px minmax(400px, 1fr) minmax(0px, 900px)" on top-level spaces. */
       const splitTracks = (value) => {
         const out = []
@@ -323,7 +309,6 @@ window.__ModuleLoader__.load({
         updateSettings({ rightbarRatio: ratio })
         lastAppliedAt = Date.now()
         applyOverride(Math.round(viewport * ratio / 100))
-        lastRatio = ratio
       }
 
       // A drag re-renders the frame's inline grid template; a window resize changes
@@ -334,8 +319,6 @@ window.__ModuleLoader__.load({
         const frame = frameOf()
         if (frame && typeof view.MutationObserver === 'function') {
           observer = new view.MutationObserver(() => {
-            const seen = ratioNow()
-            if (seen !== null) lastRatio = seen
             adoptHostWidth()
           })
           observer.observe(frame, { attributes: true, attributeFilter: ['style'] })
@@ -359,7 +342,6 @@ window.__ModuleLoader__.load({
           updateSettings({ rightbarRatio: clamped })
           lastAppliedAt = Date.now()
           applyRatio(clamped)
-          lastRatio = clamped
         },
         info() {
           return {

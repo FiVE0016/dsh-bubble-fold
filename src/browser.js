@@ -2237,11 +2237,6 @@ export function start(win, React) {
     return composerOrigin(seat).px
   }
 
-  function firstSeatVisualHeight() {
-    const seat = composerSeats()[0]
-    return seat ? composerVisualHeight(seat) : 0
-  }
-
   /** The last few drag starts, so a bad first frame can be reported with numbers. */
   const dragSamples = []
 

@@ -70,6 +70,21 @@ dsh-bubble-fold: failed
 
 打开方式：`ctx.get('sidebarRight').openTab(id)`（服务是 session 作用域，根作用域下可能拒绝，失败则退回 `ctx.get('layout').openRightbar(true, false)`）。`Ctrl + F` 只在 UA 含 `Electron/` 时接管——真浏览器有自己的查找栏，而折叠内容通过 until-found 已经对它可见。搜索与揭示逻辑在 DOM 层（`controller.search` / `controller.revealAt`），面板只是它的 React 外壳。
 
+## 右侧栏宽度（怎么设、怎么读、为什么这么绕）
+
+设置项 `rightbarRatio`（30–70%，默认 45%）。这条链路绕，是因为宿主的宽度语义和它公开的接口都不直观——**下面每一条都是在真机上验证/被坑出来的**：
+
+| 事情 | 结论 |
+|---|---|
+| `ctx.layout` 是什么 | 一个 `LayoutController` 实例，字段只有 `panels` / `hasMainPanel` / `panelInfo` / `navigation`。**没有** `layoutInfo`，**没有** `layout.setRightbar` |
+| 设宽度 | `layout.panels.setRightbar(px)`（`panels` 是 store 的**已绑定** actions）。**必须先** `layout.panels.setViewportWidth(真实帧宽)`：store 启动时 `viewportWidth` 可能是 0，它按自己的值钳位 → `clampWidth(px, 300, max(300, 0))` 恒等于 300，写进去以后宿主的 45% 默认值也不会再补（`rightbar ??=` 只在 null 时生效） |
+| 为什么设了还是不变宽 | 宿主把右栏那一列写成 **`minmax(0px, max)`**，格子按**内容**定宽：往里传再大的"最大值"也撑不宽面板 |
+| 真正的办法 | 插件自己写一条带 `!important` 的样式规则把第三列钉到目标像素（另外两列从宿主内联样式原样复制）。内联样式打不过 `!important`，于是宽度归我们；折叠（`data-rightbar-collapsed`）与全屏（`data-rightbar-fullscreen`）是呈现状态，检测到就撤规则 |
+| 怎么读宽度 | 服务没有 getter。AppFrame 是**唯一**被写了**内联** `grid-template-columns` 的元素（按这个特征定位），宽度取内联里最后一个 `minmax(0px, Npx)` 的 N——宿主自己的原始意图。从子元素往上找"第一个 grid"会命中内部 grid，读到无关数字（这条坑了一整轮） |
+| 拖动怎么联动 | 宿主拖手柄时会用**它自己的数字**重渲染内联 grid。我们把该数字与"刚写进去的值"比较：不同、且不在刚应用后的 800ms 内 → 采纳为新占比并重写规则。这个 800ms 门闩是必需的，否则我们自己的应用会被当成拖动、把设置改写成测量值（也坑过一轮） |
+
+自检：`rightbar()` 同时给出 `ratio`（宿主意图）与 `renderedRatio`（实际渲染），两者的差值就能指出"是没设进去"还是"被别的样式压过"。
+
 ## 输入框高度
 
 宿主把输入区限制在 `--dsh-composer-text-max-height`（默认 336px），超出后内部滚动。
@@ -91,9 +106,17 @@ __DSH_BUBBLE_FOLD__.rescan()                 // 强制重扫
 __DSH_BUBBLE_FOLD__.stats()                  // 性能计数器（见下）
 __DSH_BUBBLE_FOLD__.dispose()                // 临时停用并还原 DOM
 __DSH_BUBBLE_FOLD__.status                   // 'running' | 'failed'
+// 右栏宽度与输入框高度这两个"跟宿主纠缠"的功能各带自检：
+__DSH_BUBBLE_FOLD__.rightbar()               // { supported, ratio, renderedRatio, viewport }
+__DSH_BUBBLE_FOLD__.layoutDebug()            // layout 服务的真实形状（keys / panels / setRightbar 类型）
+__DSH_BUBBLE_FOLD__.layoutTry(60)            // 真机实验：普查所有三列 grid，调一次 setRightbar，再普查一遍
+__DSH_BUBBLE_FOLD__.dragLog()                // 最近几次输入框拖拽：基准值/来源/applied/一帧后实测
+__DSH_BUBBLE_FOLD__.composer()               // { min, max, value, fallback, manual }
 ```
 
 `test/diagnose.js` 是一段可直接贴进页面控制台的自检片段，会打印宿主的步骤布局、容器/成员行数量与插件状态，排查"为什么不折"时先跑它。
+
+`test/live-probe.mjs` 会开一个无头 Chrome 连上**正在运行**的界面并自动跑上面这些自检（`node test/live-probe.mjs`）。注意 `dsh web` 需要 URL 里的令牌，缺令牌时它只能看到鉴权页。
 
 ## 性能：为什么它必须"懒惰"
 
@@ -149,16 +172,21 @@ index.js                  宿主侧空壳（注入服务为空，无副作用）
 client.js                 构建产物：浏览器半，由宿主模块加载器投递
 cordis.patch.yml          bundle 补丁：把 bubble-fold 行插进平台树
 src/fold.js               纯逻辑（设置归一化、限高计算、折叠判定）—— 可在 plain Node 下测
-src/browser.js            DOM 运行时（扫描、包裹、控件、设置面板、快捷键）
-src/client-entry.js       ModuleLoader 入口，构建时被拼进 client.js
-scripts/build.mjs         把上面三个文件打包成单文件 client.js
-test/fold.test.mjs        纯逻辑单测（20 项）
-test/runtime.test.mjs     运行时、交互与真实 client.js 构建产物的加载测试（68 项）
+src/browser.js            DOM 运行时（扫描、包裹、控件、设置面板、快捷键、输入框手柄）
+src/client-entry.js       ModuleLoader 入口 + 宿主集成（设置页 tab、右栏查找 tab、右栏宽度）
+src/settings-panel.js     宿主设置页的 React 组件（与浮层面板一一对应）
+src/find-panel.js         右栏「查找」tab 的 React 组件
+scripts/build.mjs         把上面这些文件打包成单文件 client.js
+tools/make-demo-gif.py    用 Pillow 把两张截图合成 README 用的 demo.gif
+test/fold.test.mjs        纯逻辑单测（21 项）
+test/runtime.test.mjs     运行时、交互与真实 client.js 构建产物的加载测试（101 项）
+test/entry.test.mjs       入口契约：注册、右栏宽度、敌意 ctx 不崩（15 项）
 test/visual-fixture.html  宿主样式的可视化夹具（两轮对话 / 步骤串 / 两种步骤布局）
-test/visual-check.mjs     真实 Chrome 里跑夹具：默认折叠状态、几何、点击行为 + 生成 assets/ 截图
+test/visual-check.mjs     真实 Chrome 里跑夹具：折叠状态、几何、点击行为 + 生成 assets/ 截图
+test/live-probe.mjs       连正在运行的界面跑自检（需要 dsh web 的令牌）
 test/diagnose.js          排查用：贴进页面控制台，打印宿主模式与插件状态
-assets/                   README 里的截图（由 test/visual-check.mjs 生成）
-.github/workflows/test.yml CI：构建同步检查 + 两套测试（不需要浏览器与网络）
+assets/                   README 里的截图与 demo.gif（截图由 test/visual-check.mjs 生成）
+.github/workflows/test.yml CI：构建同步检查 + 三套测试（不需要浏览器与网络）
 ```
 
 ## 开发
