@@ -284,9 +284,6 @@ let activeWindow = null
 
 function makeWindow(html) {
   const listeners = { document: new Map(), window: new Map() }
-  // Clipboard writes are captured synchronously — the plugin calls writeText
-  // during the click — so a synchronous test can assert what was copied.
-  const copied = []
   const record = (bag, type, handler) => {
     if (!bag.has(type)) bag.set(type, [])
     bag.get(type).push(handler)
@@ -309,15 +306,6 @@ function makeWindow(html) {
   }
   return {
     document: doc,
-    copied,
-    navigator: {
-      clipboard: {
-        writeText(text) {
-          copied.push(String(text))
-          return Promise.resolve()
-        }
-      }
-    },
     listeners,
     innerHeight: 800,
     performance: { now: () => Date.now() },
@@ -633,22 +621,12 @@ console.log('interaction')
     assert.equal(mine.bubble.getAttribute('data-lf-open'), '0')
     assert.match(toggle.querySelector('[data-lf-label]').textContent, /展开我的输入/)
   })
-  test('a message row holds its own toggle plus the copy control', () => {
+  test('a message row holds its own toggle and nothing else', () => {
     const row = mine.anchor.querySelector('[data-lf-tail="user"]')
-    assert.equal(row.children.length, 2, 'no bulk buttons ride along')
+    assert.equal(row.children.length, 1, 'one control per folded message')
     assert.equal(row.firstElementChild.getAttribute('data-lf-toggle'), '1')
-    assert.equal(row.lastElementChild.getAttribute('data-lf-copy'), '1', 'copy sits beside the toggle')
-    assert.ok(row.querySelector('[data-lf-copy]').getAttribute('aria-label'), 'the copy control names itself')
+    assert.equal(row.querySelector('[data-lf-copy]'), null, 'copying is the host own action, not ours')
     assert.equal(row.querySelector('[data-lf-group]'), null, 'no group buttons anywhere')
-  })
-  test('copy hands the whole message over without touching the fold state', () => {
-    // The clamp is CSS only, so the text is still there to read back.
-    mine.bubble.textContent = '被折起来的正文'
-    const before = mine.bubble.getAttribute('data-lf-open')
-    fire(win, 'document', 'click', { target: mine.anchor.querySelector('[data-lf-copy]') })
-    assert.equal(mine.bubble.getAttribute('data-lf-open'), before, 'the clamp state is untouched')
-    assert.equal(win.copied.length, 1, 'one clipboard write per click')
-    assert.match(win.copied[0], /被折起来的正文/)
   })
   test('toggling one bubble leaves the other one alone', () => {
     const toggle = mine.anchor.querySelector('[data-lf-toggle]')

@@ -577,42 +577,6 @@
       font-size: 12px !important;
       line-height: 16px !important;
     }
-    /* Copy sits beside the toggle in the same control row. The clamp is CSS only, so
-       the message's own text never left the DOM: one click puts all of it on the
-       clipboard whether the message is folded or not. */
-    :root[data-dsh-bubble-fold] [data-lf-copy] {
-      display: inline-flex !important;
-      align-items: center !important;
-      gap: 4px !important;
-      margin: 2px 0 0 !important;
-      padding: 2px 9px 2px 8px !important;
-      border: 1px solid var(--dsw-alias-border-l2, rgba(15, 23, 42, .12)) !important;
-      border-radius: 999px !important;
-      background: var(--dsw-alias-bg-base, #fff) !important;
-      color: var(--dsw-alias-label-secondary, #68707d) !important;
-      font-size: 12px !important;
-      line-height: 18px !important;
-      font-weight: 450 !important;
-      cursor: pointer !important;
-      user-select: none !important;
-      white-space: nowrap !important;
-      position: relative !important;
-      z-index: 2 !important;
-      box-shadow: 0 1px 5px rgba(15, 23, 42, .1) !important;
-    }
-    :root[data-dsh-bubble-fold] [data-lf-copy] svg {
-      width: 13px !important;
-      height: 13px !important;
-      flex: none !important;
-    }
-    :root[data-dsh-bubble-fold] [data-lf-copy]:hover {
-      color: var(--dsw-alias-label-primary, #1f2328) !important;
-      background: var(--dsw-alias-interactive-bg-hover, rgba(15, 23, 42, .05)) !important;
-    }
-    :root[data-dsh-bubble-fold] [data-lf-copy][data-lf-copied="1"] {
-      color: var(--dsw-alias-state-success-primary, #2f9e44) !important;
-      border-color: currentColor !important;
-    }
     /* Printing is the one place the reader cannot undo a fold: paper has no
        scrollbar and no click. Expand everything the plugin clamps by CSS —
        attribute-level hides are undone in JS before the snapshot, where a style
@@ -637,7 +601,6 @@
         content-visibility: visible !important;
       }
       :root[data-dsh-bubble-fold] [data-lf-toggle],
-      :root[data-dsh-bubble-fold] [data-lf-copy],
       :root[data-dsh-bubble-fold] [data-lf-tail],
       :root[data-dsh-bubble-fold] [data-lf-step-line],
       :root[data-dsh-bubble-fold] [data-lf-composer-handle],
@@ -1412,10 +1375,6 @@
       /** A downward chevron: one step block ("展开本步骤"). */
       const CHEVRON_ICON = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
-      /** Two sheets + a check, matching the chevron's 16-box grid. */
-      const COPY_ICON = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><rect x="5.75" y="5.75" width="7.5" height="7.5" rx="1.6" stroke="currentColor" stroke-width="1.4"/><path d="M10.25 5.75V4.4A1.65 1.65 0 0 0 8.6 2.75H4.4A1.65 1.65 0 0 0 2.75 4.4v4.2A1.65 1.65 0 0 0 4.4 10.25h1.35" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>'
-      const CHECK_ICON = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M3.5 8.5l3 3 6-6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>'
-
       /** A stacked double chevron: "not one block — this Turn's seams" (展开全部). */
       const DOUBLE_CHEVRON_ICON = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4 4.5l4 3.5 4-3.5M4 9l4 3.5 4-3.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
 
@@ -1433,10 +1392,6 @@
       /** Every block's content in the Turn. */
       const EVERY_OPEN_LABEL = '展开所有步骤'
       const EVERY_FOLD_LABEL = '收起所有步骤'
-
-      const COPY_LABEL = '复制'
-      const COPIED_LABEL = '已复制'
-      const COPIED_MS = 1200
 
       /**
        * The message's own prose, folded or not. `max-height` is CSS only, so the
@@ -1472,70 +1427,6 @@
           .replace(/[ \t]+\n/g, '\n')
           .replace(/\n{3,}/g, '\n\n')
           .trim()
-      }
-
-      /** Clipboard, with the selection trick as the fallback for a blocked promise. */
-      function writeClipboard(text) {
-        const clipboard = win.navigator?.clipboard
-        if (clipboard && typeof clipboard.writeText === 'function') {
-          return Promise.resolve(clipboard.writeText(text)).then(() => true, () => legacyCopy(text))
-        }
-        return Promise.resolve(legacyCopy(text))
-      }
-
-      function legacyCopy(text) {
-        try {
-          const area = doc.createElement('textarea')
-          area.value = text
-          area.setAttribute('readonly', '')
-          area.style.position = 'fixed'
-          area.style.top = '-1000px'
-          area.style.opacity = '0'
-          doc.body.appendChild(area)
-          area.select()
-          const ok = typeof doc.execCommand === 'function' && doc.execCommand('copy') === true
-          area.remove()
-          return ok
-        } catch {
-          return false
-        }
-      }
-
-      /** A capsule button that copies one message's full text. */
-      function copyControl() {
-        const button = doc.createElement('button')
-        button.type = 'button'
-        button.setAttribute('data-lf-copy', '1')
-        button.setAttribute('aria-label', COPY_LABEL)
-        button.setAttribute('title', COPY_LABEL)
-        const icon = doc.createElement('span')
-        icon.setAttribute('aria-hidden', 'true')
-        icon.innerHTML = COPY_ICON
-        const text = doc.createElement('span')
-        text.setAttribute('data-lf-label', '1')
-        text.textContent = COPY_LABEL
-        button.append(icon, text)
-        return button
-      }
-
-      function flashCopied(button, text) {
-        if (text === '') return
-        writeClipboard(text).then((ok) => {
-          if (!ok || !button.isConnected) return
-          const icon = button.firstElementChild
-          const label = button.querySelector('[data-lf-label]')
-          button.setAttribute('data-lf-copied', '1')
-          button.setAttribute('title', COPIED_LABEL)
-          if (icon) icon.innerHTML = CHECK_ICON
-          if (label) label.textContent = COPIED_LABEL
-          win.setTimeout(() => {
-            if (!button.isConnected) return
-            button.removeAttribute('data-lf-copied')
-            button.setAttribute('title', COPY_LABEL)
-            if (icon) icon.innerHTML = COPY_ICON
-            if (label) label.textContent = COPY_LABEL
-          }, COPIED_MS)
-        })
       }
 
       /** A bubble-styled capsule button: chevron icon + label text. */
@@ -1620,13 +1511,9 @@
         const toggle = controlButton('', 'data-lf-toggle')
         toggle.setAttribute('aria-expanded', 'false')
         tail.appendChild(toggle)
-        // Copy rides in the same row: it only appears where the message is folded,
-        // which is exactly where "give me the whole thing" is asked for.
-        const copy = copyControl()
-        tail.appendChild(copy)
         anchor.appendChild(tail)
 
-        const record = { body, tail, toggle, copy, wrapper, kind, anchor }
+        const record = { body, tail, toggle, wrapper, kind, anchor }
         // Deliberately NO scroll-driven expansion here: the clamp box is clipped, not
         // scrollable, so a wheel passing over a folded message must leave it alone.
         // The find panel expands what it reveals through revealAt instead.
@@ -2573,20 +2460,6 @@
       function onClick(event) {
         const target = event.target
         if (!(target instanceof win.Element)) return
-
-        // The copy control: the message's full text, folded or not. It is a sibling
-        // of the toggle, so it must be handled before the toggle branch looks for
-        // its own attribute.
-        const copy = target.closest('[data-lf-copy]')
-        if (copy) {
-          for (const record of clamped.values()) {
-            if (record.copy === copy) {
-              flashCopied(copy, textOfBody(record.body))
-              break
-            }
-          }
-          return
-        }
 
         // A bubble's own toggle: flips just that message.
         const toggle = target.closest('[data-lf-toggle]')
