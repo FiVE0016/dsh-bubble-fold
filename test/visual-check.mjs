@@ -272,6 +272,27 @@ console.log('states  :', JSON.stringify(await evaluate(`(async () => {
   return state
 })()`), null, 2))
 
+// Three frames for the README animation: one Turn in 状态0 → 状态1 → 状态2. They
+// come from this real build, and tools/make-demo-gif.py crops the same window out
+// of each, so the GIF shows the seam controls changing rather than the page
+// scrolling. The last click returns to 状态0, which the find probe below expects.
+const demoClick = async (selector) => {
+  await evaluate(`(() => {
+    const nodes = [...document.querySelectorAll('${selector}')].filter((el) => !el.hidden && el.offsetParent !== null)
+    const target = nodes[nodes.length - 1]
+    if (!target) return false
+    target.click()
+    return true
+  })()`)
+  await evaluate('new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))')
+}
+await shot('demo-1-folded.png')
+await demoClick('[data-lf-step-all]')
+await shot('demo-2-spread.png')
+await demoClick('[data-lf-step-every]')
+await shot('demo-3-open.png')
+await demoClick('[data-lf-step-all]')
+
 // The plugin's own stylesheet must actually be MATCHING. A rename once rewrote the
 // CSS selectors but not the attribute the plugin sets: every rule went dead and the
 // controls rendered as browser-default buttons — and no unit test could see it,

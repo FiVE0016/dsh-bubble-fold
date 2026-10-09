@@ -29,7 +29,9 @@
     "cordis.patch.yml",
     "README.md",
     "CHANGELOG.md",
-    "assets"
+    "assets/demo.gif",
+    "assets/step-fold-default.png",
+    "assets/step-fold-expanded.png"
   ],
   "dsh": {
     "bundle": {
