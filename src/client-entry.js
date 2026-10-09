@@ -168,8 +168,9 @@ window.__ModuleLoader__.load({
       // Until our stored value has been applied, observations must not overwrite it:
       // the host reports its own 45% default at startup, and writing that back would
       // silently replace the reader's choice before it ever reached the store.
-      let settled = false
       let lastRatio = null
+      /** The px our stylesheet rule is forcing right now (0 = no override in force). */
+      let forcedPx = 0
       /**
        * `fromDrag` is the whole gate: only a REAL drag — an inline grid change the
        * host's own handle made — may write back. Our own applies can land on a value
@@ -183,72 +184,198 @@ window.__ModuleLoader__.load({
         if (!fromDrag) return
         if (getSettings()?.rightbarRatio !== ratio) updateSettings({ rightbarRatio: ratio })
       }
-      const applyRatio = (ratio) => {
-        if (!setRightbar || !(ratio > 0)) return false
-        const viewport = viewportOf()
-        if (!(viewport > 0)) return false
+      /** Split "280px minmax(400px, 1fr) minmax(0px, 900px)" on top-level spaces. */
+      const splitTracks = (value) => {
+        const out = []
+        let depth = 0
+        let current = ''
+        for (const char of String(value ?? '')) {
+          if (char === '(') depth += 1
+          else if (char === ')') depth -= 1
+          if (char === ' ' && depth === 0) {
+            if (current) out.push(current)
+            current = ''
+            continue
+          }
+          current += char
+        }
+        if (current) out.push(current)
+        return out
+      }
+      const inlineTracks = (frame) => {
         try {
-          // Keep the store's own idea of the frame width in step. It clamps the
-          // requested width against ITS `viewportWidth`, which at boot can still be
-          // 0 — and then every request collapses to the 300px floor, which is the
-          // "sidebar comes back to its initial position" a restart showed.
-          setViewport?.(viewport)
-          setRightbar(Math.round(viewport * ratio / 100))
-          return true
+          return splitTracks(frame?.style?.gridTemplateColumns)
         } catch {
+          return []
+        }
+      }
+      /** The host's own third-track maximum: the number the store was asked for. */
+      const hostRightbarPx = (frame) => {
+        const tracks = inlineTracks(frame)
+        const last = tracks[tracks.length - 1] ?? ''
+        const maxima = [...last.matchAll(/minmax\(\s*[^,]+,\s*([\d.]+)px\s*\)/g)]
+        if (maxima.length > 0) return Number.parseFloat(maxima[maxima.length - 1][1])
+        const px = Number.parseFloat(last)
+        return Number.isFinite(px) ? px : 0
+      }
+      const FRAME_MARK = 'data-lf-frame'
+      const RULE_ID = 'dsh-bubble-fold-frame'
+      /** What the frame is ACTUALLY rendering right now, in px. */
+      const renderedPx = () => {
+        const frame = frameOf()
+        if (!frame) return 0
+        try {
+          const sizes = String(view.getComputedStyle(frame).gridTemplateColumns)
+            .split(' ')
+            .map((part) => Number.parseFloat(part))
+            .filter((px) => Number.isFinite(px))
+          return sizes.length >= 2 ? sizes[sizes.length - 1] : 0
+        } catch {
+          return 0
+        }
+      }
+      const clearOverride = () => {
+        const tag = doc?.getElementById?.(RULE_ID)
+        if (tag) tag.textContent = ''
+        frameOf()?.removeAttribute?.(FRAME_MARK)
+        forcedPx = 0
+      }
+      /**
+       * Force the right column to the chosen width.
+       *
+       * The host writes that column as `minmax(0px, max)`, which sizes to its
+       * CONTENT — so asking the store for a bigger max does not widen anything (the
+       * panel keeps its own width). A stylesheet rule with `!important` beats the
+       * host's inline style, so the width becomes ours, while the other two tracks
+       * are copied from the host verbatim. Collapsed and fullscreen are
+       * presentations, not widths, so they are never fought.
+       */
+      const applyOverride = (px) => {
+        const frame = frameOf()
+        if (!frame || !doc?.head || typeof doc.createElement !== 'function') return false
+        if (frame.hasAttribute?.('data-rightbar-collapsed') || frame.hasAttribute?.('data-rightbar-fullscreen')) {
+          clearOverride()
           return false
         }
+        const tracks = inlineTracks(frame)
+        if (tracks.length < 3) return false
+        let tag = doc.getElementById(RULE_ID)
+        if (!tag) {
+          tag = doc.createElement('style')
+          tag.setAttribute('id', RULE_ID)
+          doc.head.appendChild(tag)
+        }
+        const head = tracks.slice(0, tracks.length - 1).join(' ')
+        frame.setAttribute(FRAME_MARK, '1')
+        tag.textContent = `[${FRAME_MARK}]{grid-template-columns:${head} ${Math.round(px)}px !important}`
+        forcedPx = Math.round(px)
+        return true
+      }
+      const applyRatio = (ratio) => {
+        const viewport = viewportOf()
+        if (!(ratio > 0) || !(viewport > 0)) return false
+        const px = Math.round(viewport * ratio / 100)
+        // Mark the moment so the observer can tell "the host re-rendered from OUR
+        // apply" apart from "the reader dragged the handle".
+        lastAppliedAt = Date.now()
+        if (setRightbar) {
+          try {
+            // Keep the store's own idea of the frame width in step: it clamps the
+            // request against ITS viewportWidth, which is 0 during boot.
+            setViewport?.(viewport)
+            setRightbar(px)
+          } catch { /* the store refused; the CSS override still decides the width */ }
+        }
+        return applyOverride(px) || !!setRightbar
       }
       // The frame is not measurable at activation time, the controller (which owns
       // the settings) is created after this control, and the window itself may only
-      // settle later — so keep retrying for a while and stop as soon as the width
-      // really matches what was asked for.
+      // settle later — so keep retrying until the width really is in force.
       const timers = []
       const applyStored = (attempt) => {
         if (disposed) return
         const ratio = getSettings()?.rightbarRatio
-        const applied = ratio > 0 ? applyRatio(ratio) : false
-        const now = ratioNow()
-        if (applied && now !== null && Math.abs(now - ratio) <= 1) {
-          settled = true
-          return
-        }
+        if (ratio > 0 && applyRatio(ratio)) return
         if (attempt < 20) {
           timers.push(view.setTimeout(() => applyStored(attempt + 1), 500))
           return
         }
-        settled = !!setRightbar
       }
       timers.push(view.setTimeout(() => applyStored(0), 0))
 
-      // A drag changes the frame's inline grid template; a window resize changes the
-      // frame. Both are read from the DOM, since the store exposes no getter — but
-      // only the drag is allowed to write the ratio back (see `observe`).
+      /**
+       * The host re-renders the frame from its own store whenever the reader drags
+       * the handle. Our own applies land on the same value we forced, so anything
+       * that differs and does not come from an apply in flight is a drag: adopt it
+       * (write it back as the ratio) and re-force the width at that size, which is
+       * what keeps the drag visible even though our rule owns the layout.
+       */
+      let lastAppliedAt = 0
+      const adoptHostWidth = () => {
+        if (disposed) return
+        const frame = frameOf()
+        const hostPx = hostRightbarPx(frame)
+        const viewport = viewportOf()
+        if (!(hostPx > 0) || !(viewport > 0)) return
+        if (Math.abs(hostPx - forcedPx) <= 2) return
+        if (Date.now() - lastAppliedAt < 800) return
+        const ratio = Math.max(30, Math.min(70, Math.round((hostPx / viewport) * 100)))
+        updateSettings({ rightbarRatio: ratio })
+        lastAppliedAt = Date.now()
+        applyOverride(Math.round(viewport * ratio / 100))
+        lastRatio = ratio
+      }
+
+      // A drag re-renders the frame's inline grid template; a window resize changes
+      // what the same ratio means in px. The store exposes no getter, so both are
+      // read from the DOM.
       let observer = null
       try {
         const frame = frameOf()
         if (frame && typeof view.MutationObserver === 'function') {
-          observer = new view.MutationObserver(() => observe(true))
+          observer = new view.MutationObserver(() => {
+            const seen = ratioNow()
+            if (seen !== null) lastRatio = seen
+            adoptHostWidth()
+          })
           observer.observe(frame, { attributes: true, attributeFilter: ['style'] })
         }
       } catch { observer = null }
-      const onResize = () => { if (!disposed) view.setTimeout(() => observe(false), 60) }
+      const onResize = () => {
+        if (disposed) return
+        view.setTimeout(() => {
+          const ratio = getSettings()?.rightbarRatio
+          if (ratio > 0) {
+            lastAppliedAt = Date.now()
+            applyRatio(ratio)
+          }
+        }, 60)
+      }
       try { view.addEventListener('resize', onResize) } catch { /* no window events */ }
 
       return {
         setRatio(ratio) {
           const clamped = Math.max(30, Math.min(70, Math.round(Number(ratio) || 45)))
           updateSettings({ rightbarRatio: clamped })
-          settled = false
+          lastAppliedAt = Date.now()
           applyRatio(clamped)
-          lastRatio = null
-          view.setTimeout(() => { settled = true; observe(false) }, 120)
+          lastRatio = clamped
         },
         info() {
-          return { supported: !!setRightbar, ratio: ratioNow(), viewport: viewportOf() }
+          return {
+            supported: !!(setRightbar || forcedPx),
+            ratio: ratioNow(),
+            renderedRatio: (() => {
+              const viewport = viewportOf()
+              const px = renderedPx()
+              return viewport > 0 && px > 0 ? Math.round((px / viewport) * 100) : null
+            })(),
+            viewport: viewportOf()
+          }
         },
         dispose() {
           disposed = true
+          clearOverride()
           observer?.disconnect()
           observer = null
           for (const timer of timers) view.clearTimeout(timer)

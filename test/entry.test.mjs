@@ -62,6 +62,7 @@ const runEntry = (options = {}) => {
     useState: (initial) => [typeof initial === 'function' ? initial() : initial, () => {}],
     useEffect: () => {}
   }
+  const observers = []
   const win = {
     __ModuleLoader__: { load: (row) => { registration = row } },
     __DSH_BUBBLE_FOLD_MODULES__: {
@@ -80,7 +81,11 @@ const runEntry = (options = {}) => {
     // waits for the controller race ahead of its own creation.
     setTimeout: (fn) => { if (typeof fn === 'function') Promise.resolve().then(fn); return 0 },
     clearTimeout: () => {},
-    MutationObserver: class { observe() {} disconnect() {} },
+    MutationObserver: class {
+      constructor(callback) { this.callback = callback }
+      observe() { observers.push(this.callback) }
+      disconnect() {}
+    },
     HTMLElement: class {},
     Element: class {},
     innerWidth: 1600,
@@ -93,7 +98,38 @@ const runEntry = (options = {}) => {
   const fn = new Function('window', 'document', 'console', source)
   fn(win, fakeDocument, { warn() {}, error() {}, log() {} })
   const plugin = registration.factory((name) => (name === 'react' ? fakeReact : null))
-  return { plugin, win, fakeController, listeners }
+  return { plugin, win, fakeController, listeners, observers }
+}
+
+/** A document with a frame carrying the host's inline grid, for width tests. */
+const makeFrameDocument = (tracks = '280px minmax(400px, 1fr) minmax(0px, 720px)') => {
+  const created = []
+  const frame = {
+    style: { gridTemplateColumns: tracks },
+    attrs: {},
+    hasAttribute(name) { return Object.prototype.hasOwnProperty.call(this.attrs, name) },
+    setAttribute(name, value) { this.attrs[name] = value },
+    removeAttribute(name) { delete this.attrs[name] }
+  }
+  const head = { children: [], appendChild(child) { this.children.push(child) } }
+  return {
+    frame,
+    created,
+    document: {
+      defaultView: null,
+      head,
+      body: null,
+      documentElement: null,
+      createElement: () => {
+        const el = { id: '', textContent: '', setAttribute(name, value) { if (name === 'id') this.id = value } }
+        created.push(el)
+        return el
+      },
+      getElementById: (id) => created.find((el) => el.id === id) ?? null,
+      querySelector: () => null,
+      querySelectorAll: (selector) => (String(selector).includes('div[style]') ? [frame] : [])
+    }
+  }
 }
 
 /** A ctx with the slot ledger plus the right-bar services the entry asks for. */
@@ -339,6 +375,53 @@ test('the right-bar width is read from the host inline grid, never guessed', asy
   plugin.apply(ctx)
   await tick()
   assert.equal(win.__DSH_BUBBLE_FOLD__.rightbar().ratio, 56, '900px of a 1600px frame')
+})
+
+test('the chosen width is forced with a stylesheet rule, not left to the host', async () => {
+  // The host's third column is `minmax(0px, max)` — content-sized — so asking the
+  // store for a bigger max does not widen it. The rule is what makes the chosen
+  // ratio real.
+  const { document, frame, created } = makeFrameDocument()
+  const { plugin, win } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36', document })
+  const ctx = {
+    slots: { inject: (_name, callback) => { callback(); return () => {} }, register: () => () => {} },
+    get: (name) => (name === 'layout' ? { panels: { setRightbar: () => {}, setViewportWidth: () => {} } } : undefined)
+  }
+  plugin.apply(ctx)
+  await tick()
+  const rule = created.find((el) => el.id === 'dsh-bubble-fold-frame')
+  assert.ok(rule, '一条覆盖规则被写进 head')
+  assert.match(rule.textContent, /!important/, '必须能压过宿主的内联样式')
+  assert.match(rule.textContent, /720px/, '45% of a 1600px frame')
+  assert.match(rule.textContent, /280px minmax\(400px, 1fr\)/, '另外两列原样保留')
+  assert.equal(frame.attrs['data-lf-frame'], '1', '框架被标记')
+  win.__DSH_BUBBLE_FOLD__.setRightbarRatio(60)
+  assert.match(rule.textContent, /960px/, '改设置立刻重写规则')
+})
+
+test('a drag is adopted, and our own apply is not mistaken for one', async () => {
+  const { document, frame } = makeFrameDocument()
+  const { plugin, win, observers, fakeController } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36', document })
+  const applied = []
+  const ctx = {
+    slots: { inject: (_name, callback) => { callback(); return () => {} }, register: () => () => {} },
+    get: (name) => (name === 'layout' ? { panels: { setRightbar: (px) => applied.push(px), setViewportWidth: () => {} } } : undefined)
+  }
+  plugin.apply(ctx)
+  await tick()
+  assert.equal(observers.length, 1, '框架的样式变化被观察')
+
+  // Right after our own apply the host re-renders: that must NOT become the ratio.
+  frame.style.gridTemplateColumns = '280px minmax(400px, 1fr) minmax(0px, 300px)'
+  observers[0]()
+  assert.equal(fakeController.applied.length, 0, '自己的应用不算拖动')
+
+  // A real drag, later: the host number changes and we adopt it.
+  await new Promise((resolve) => setTimeout(resolve, 850))
+  frame.style.gridTemplateColumns = '280px minmax(400px, 1fr) minmax(0px, 960px)'
+  observers[0]()
+  assert.deepEqual(fakeController.applied.at(-1), { rightbarRatio: 60 }, '拖动写回设置（960 / 1600）')
+  assert.equal(win.__DSH_BUBBLE_FOLD__.rightbar().ratio, 60, '读回也是 60%')
 })
 
 test('a host without panels.setRightbar degrades instead of throwing', () => {
