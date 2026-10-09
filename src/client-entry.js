@@ -240,6 +240,11 @@ window.__ModuleLoader__.load({
       const applyOverride = (px) => {
         const frame = frameOf()
         if (!frame || !doc?.head || typeof doc.createElement !== 'function') return false
+        // The plugin's own master switch wins: disabled means the host lays out alone.
+        if (getSettings()?.enabled === false) {
+          clearOverride()
+          return false
+        }
         if (frame.hasAttribute?.('data-rightbar-collapsed') || frame.hasAttribute?.('data-rightbar-fullscreen')) {
           clearOverride()
           return false
@@ -312,6 +317,38 @@ window.__ModuleLoader__.load({
         applyOverride(Math.round(viewport * ratio / 100))
       }
 
+      /**
+       * The frame re-rendered — by the host's handle, by a close/open, or by our own
+       * apply. A `!important` rule of ours would otherwise keep the third column
+       * reserved after the host CLOSED the panel, which leaves the conversation stuck
+       * at half width with the sidebar gone. So: a closed, fullscreen or zero-width
+       * column always drops the rule, and a column that comes BACK gets the reader's
+       * stored ratio again.
+       */
+      let wasShown = false
+      const onFrameChange = () => {
+        if (disposed) return
+        const frame = frameOf()
+        const collapsed = frame?.hasAttribute?.('data-rightbar-collapsed') === true
+        const fullscreen = frame?.hasAttribute?.('data-rightbar-fullscreen') === true
+        const hostPx = hostRightbarPx(frame)
+        if (collapsed || fullscreen || !(hostPx > 0)) {
+          clearOverride()
+          wasShown = false
+          return
+        }
+        if (!wasShown) {
+          wasShown = true
+          const ratio = getSettings()?.rightbarRatio
+          if (ratio > 0) {
+            lastAppliedAt = Date.now()
+            applyRatio(ratio)
+            return
+          }
+        }
+        adoptHostWidth()
+      }
+
       // A drag re-renders the frame's inline grid template; a window resize changes
       // what the same ratio means in px. The store exposes no getter, so both are
       // read from the DOM.
@@ -320,9 +357,14 @@ window.__ModuleLoader__.load({
         const frame = frameOf()
         if (frame && typeof view.MutationObserver === 'function') {
           observer = new view.MutationObserver(() => {
-            adoptHostWidth()
+            onFrameChange()
           })
-          observer.observe(frame, { attributes: true, attributeFilter: ['style'] })
+          // `style` alone is not enough: a close may only flip the presentation
+          // attributes, and then nothing would ever release the forced column.
+          observer.observe(frame, {
+            attributes: true,
+            attributeFilter: ['style', 'data-rightbar-collapsed', 'data-rightbar-fullscreen']
+          })
         }
       } catch { observer = null }
       const onResize = () => {

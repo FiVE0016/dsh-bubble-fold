@@ -439,6 +439,37 @@ test('the stylesheet selects exactly the root attribute the plugin sets', async 
   assert.ok(browser.includes('F.STYLE_ID') || browser.includes(styleId), '样式标签 id 应来自 STYLE_ID')
 })
 
+test('closing the right panel releases the forced width, reopening restores it', async () => {
+  // A forced `!important` column survives the host CLOSING the panel, and then the
+  // conversation stays stuck at half width with no sidebar to explain it. Closing,
+  // going fullscreen, or a zero-width column must always drop the rule.
+  const { document, frame, created } = makeFrameDocument()
+  const { plugin, observers } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36', document })
+  const ctx = {
+    slots: { inject: (_name, callback) => { callback(); return () => {} }, register: () => () => {} },
+    get: (name) => (name === 'layout' ? { panels: { setRightbar: () => {}, setViewportWidth: () => {} } } : undefined)
+  }
+  plugin.apply(ctx)
+  await tick()
+  const rule = created.find((el) => el.id === 'dsh-bubble-fold-frame')
+  assert.ok(rule && /720px/.test(rule.textContent), '启动时强制了设定宽度')
+  assert.equal(frame.attrs['data-lf-frame'], '1')
+
+  // Closing: the host zeroes the third column and marks the frame collapsed.
+  frame.attrs['data-rightbar-collapsed'] = '1'
+  frame.style.gridTemplateColumns = '280px minmax(400px, 1fr) minmax(0px, 0px)'
+  observers[0]()
+  assert.equal(rule.textContent, '', '关闭后必须撤掉强制宽度，否则主区域被占住')
+  assert.equal(frame.attrs['data-lf-frame'], undefined, '框架标记也撤掉')
+
+  // Reopening: the reader's own width comes back.
+  delete frame.attrs['data-rightbar-collapsed']
+  frame.style.gridTemplateColumns = '280px minmax(400px, 1fr) minmax(0px, 720px)'
+  observers[0]()
+  assert.match(rule.textContent, /720px/, '重新打开时恢复')
+  assert.equal(frame.attrs['data-lf-frame'], '1')
+})
+
 test('a host without panels.setRightbar degrades instead of throwing', () => {
   const { plugin, win } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36' })
   const ctx = {
