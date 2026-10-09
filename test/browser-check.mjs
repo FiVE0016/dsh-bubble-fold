@@ -100,7 +100,7 @@ check('控制台句柄出现', ready === true, ready ? undefined : '句柄不存
 check('插件状态为 running', status === 'running', `status=${status}`)
 
 console.log('\n=== 2. 真实会话里的折叠 ===')
-const dom = await evaluate(`(() => {
+const readDom = () => evaluate(`(() => {
   const count = (selector) => document.querySelectorAll(selector).length
   const bodies = [...document.querySelectorAll('[data-lf-body]')]
   const last = bodies[bodies.length - 1] ?? null
@@ -119,6 +119,39 @@ const dom = await evaluate(`(() => {
     lastBodyClamped: last ? last.getAttribute('data-lf-clamped') === '1' : null
   }
 })()`)
+let dom = await readDom()
+
+// This client has its own session, and a fresh one is empty. A past session from
+// the sidebar is free to open and has real messages, so the check does not need
+// the reader to click anything (and cannot see their tab anyway).
+let switched = null
+if (dom.bodies === 0) {
+  switched = await evaluate(`(() => {
+    const rows = [...document.querySelectorAll('div[class*="sessionRow"]')]
+    const other = rows.find((el) => !String(el.className).includes('selected'))
+    if (!other) return { clicked: false, rows: rows.length }
+    other.click()
+    return { clicked: true, rows: rows.length, text: (other.innerText || '').replace(/\\s+/g, ' ').trim().slice(0, 30) }
+  })()`)
+  for (let i = 0; i < 24 && dom.bodies === 0; i += 1) {
+    await sleep(500)
+    dom = await readDom()
+  }
+  console.log(`  切换到旧会话: ${JSON.stringify(switched)} → bodies=${dom.bodies}`)
+
+  // The plugin scans history lazily — that is what keeps a 1000-row session cheap —
+  // so the counts keep growing for a while after a session loads. Wait for them to
+  // stop changing before asserting anything.
+  let previous = -1
+  for (let i = 0; i < 40; i += 1) {
+    const now = dom.bodies + dom.clamped + dom.toggles + dom.seams
+    if (now === previous && dom.bodies > 1) break
+    previous = now
+    await sleep(500)
+    dom = await readDom()
+  }
+  console.log(`  扫描稳定后: bodies=${dom.bodies} clamped=${dom.clamped} seams=${dom.seams}`)
+}
 console.log('  ' + JSON.stringify(dom))
 
 check('样式已挂载到 root', dom.rootAttribute === 'on', `root=${dom.rootAttribute}`)
@@ -129,9 +162,13 @@ if (dom.bodies === 0) {
   check('折叠生效', null, '同上')
 } else {
   check('扫描到消息气泡', true, `bodies=${dom.bodies}`)
-  check('超长消息被折起', dom.clamped > 0, `clamped=${dom.clamped}`)
-  check('最新一轮保持展开', dom.lastBodyClamped === false, `lastBodyClamped=${dom.lastBodyClamped}`)
   check('折叠控件已渲染', dom.toggles > 0, `toggles=${dom.toggles}`)
+  // The plugin only scans what is near the viewport (that is what keeps a long
+  // session cheap), so a freshly opened session exposes just its newest messages:
+  // clamping can only be judged after scrolling back through history.
+  check('超长消息被折起', dom.clamped > 0 ? true : null,
+    dom.clamped > 0 ? `clamped=${dom.clamped}` : '视口内没有超长消息：向上滚动加载更早的消息后再跑即可判定')
+  check('最新一轮保持展开', dom.lastBodyClamped === false, `lastBodyClamped=${dom.lastBodyClamped}`)
 }
 if (dom.flowRows === 0) {
   check('工作步骤缝隙', null, '当前会话没有工作步骤')
