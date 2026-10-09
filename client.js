@@ -3175,11 +3175,17 @@
         // silently replace the reader's choice before it ever reached the store.
         let settled = false
         let lastRatio = null
-        const observe = () => {
-          if (!settled) return
+        /**
+         * `fromDrag` is the whole gate: only a REAL drag — an inline grid change the
+         * host's own handle made — may write back. Our own applies can land on a value
+         * the host renders differently, and writing THAT back silently replaced the
+         * reader's 50% with whatever the measurement happened to read.
+         */
+        const observe = (fromDrag = false) => {
           const ratio = ratioNow()
           if (ratio === null || ratio === lastRatio) return
           lastRatio = ratio
+          if (!fromDrag) return
           if (getSettings()?.rightbarRatio !== ratio) updateSettings({ rightbarRatio: ratio })
         }
         const applyRatio = (ratio) => {
@@ -3215,16 +3221,17 @@
         timers.push(view.setTimeout(() => applyStored(0), 0))
 
         // A drag changes the frame's inline grid template; a window resize changes the
-        // frame. Both are read from the DOM, since the store exposes no getter.
+        // frame. Both are read from the DOM, since the store exposes no getter — but
+        // only the drag is allowed to write the ratio back (see `observe`).
         let observer = null
         try {
           const frame = frameOf()
           if (frame && typeof view.MutationObserver === 'function') {
-            observer = new view.MutationObserver(() => observe())
+            observer = new view.MutationObserver(() => observe(true))
             observer.observe(frame, { attributes: true, attributeFilter: ['style'] })
           }
         } catch { observer = null }
-        const onResize = () => { if (!disposed) view.setTimeout(observe, 60) }
+        const onResize = () => { if (!disposed) view.setTimeout(() => observe(false), 60) }
         try { view.addEventListener('resize', onResize) } catch { /* no window events */ }
 
         return {
@@ -3234,7 +3241,7 @@
             settled = false
             applyRatio(clamped)
             lastRatio = null
-            view.setTimeout(() => { settled = true; observe() }, 120)
+            view.setTimeout(() => { settled = true; observe(false) }, 120)
           },
           info() {
             return { supported: !!setRightbar, ratio: ratioNow(), viewport: viewportOf() }
