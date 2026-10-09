@@ -2098,8 +2098,16 @@ export function start(win, React) {
    * first drag seemed dead. When the user takes manual control we also pin the
    * scroll area with a min-height, so the box actually grows to the chosen size
    * (and still auto-scrolls once content passes it).
+   *
+   * The host marks that container with `data-input-scroll` (verified in its own
+   * bundle: `className: css.scroll, "data-input-scroll": true`, wrapping the
+   * contenteditable). Scanning for `overflow-y: auto` instead can return some
+   * other scrollable box inside the card, and a wrong box means a wrong drag
+   * origin — which the reader sees as the composer jumping on the first frame.
    */
   function composerScrollOf(card) {
+    const marked = card.querySelector('[data-input-scroll]')
+    if (marked) return marked
     for (const node of card.querySelectorAll('*')) {
       let style
       try {
@@ -2230,7 +2238,11 @@ export function start(win, React) {
     dragState = {
       handle,
       startY: event.clientY ?? 0,
-      startVisual: firstSeatVisualHeight(),
+      // Captured when the drag really starts, not here: anything the host does
+      // between pointerdown and the first move (focus, auto-grow, layout) must be
+      // absorbed into the origin instead of becoming a jump. The delta still
+      // counts from the pointerdown position, so no pointer travel is lost.
+      baseVisual: 0,
       moved: false
     }
     setAttr(handle, 'data-dragging', '1')
@@ -2247,13 +2259,16 @@ export function start(win, React) {
     // The handle is the TOP EDGE of the composer: pulling it UP must raise the
     // edge and grow the box, so the pointer keeps touching the handle the whole
     // drag (up = taller, down = shorter).
-    const delta = (event.clientY ?? 0) - dragState.startY
+    const y = event.clientY ?? 0
     if (!dragState.moved) {
-      if (Math.abs(delta) < DRAG_THRESHOLD_PX) return
+      if (Math.abs(y - dragState.startY) < DRAG_THRESHOLD_PX) return
+      const origin = firstSeatVisualHeight()
+      if (!(origin > 0)) return
       dragState.moved = true
+      dragState.baseVisual = origin
     }
-    if (!(dragState.startVisual > 0)) return
-    setComposerHeight(dragState.startVisual - delta)
+    if (!(dragState.baseVisual > 0)) return
+    setComposerHeight(dragState.baseVisual - (y - dragState.startY))
   }
 
   function onPointerUp() {

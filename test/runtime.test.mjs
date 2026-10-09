@@ -1663,6 +1663,20 @@ console.log('composer resize')
     assert.equal(heightVar(), before, 'the tap never turned into a resize')
     assert.equal(scroll.style.values['min-height'], undefined, 'still unpinned')
   })
+  test('the drag origin is measured when the drag starts, not on pointerdown', () => {
+    const handle = handleOf()
+    fire(win, 'document', 'pointerdown', { target: handle, clientY: 200, preventDefault() {} })
+    // The host grows the box between the press and the first move (focus / auto
+    // grow). That growth belongs to the origin — it must not become a jump.
+    const natural = scroll.rectHeight
+    scroll.rectHeight = 200
+    fire(win, 'window', 'pointermove', { clientY: 160 })
+    assert.equal(heightVar(), '240px', '200 (current, grown) + 40 pulled up')
+    fire(win, 'window', 'pointerup', {})
+    scroll.rectHeight = natural
+    // Leave no manual pin behind: the later drag tests start from the natural box.
+    fire(win, 'document', 'dblclick', { target: handle })
+  })
   test('dragging UP grows the composer', () => {
     const handle = handleOf()
     fire(win, 'document', 'pointerdown', { target: handle, clientY: 100, preventDefault() {} })
