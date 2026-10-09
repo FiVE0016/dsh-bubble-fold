@@ -1129,22 +1129,45 @@ console.log('default: each Turn shows one button until asked')
   })
 }
 
-console.log('a message with an attachment is never folded')
+console.log('a picture keeps its height; the text still folds')
 {
   const fixture = buildFixture()
-  // Same long body that folds on its own, but the row carries an image/file row.
-  const withImage = fixture.user({}, 900, true)
-  const plain = fixture.user({ 'data-chat-anchor-key': 'user:2' }, 900)
+  // The layout that hid the reader's own text: the media sits INSIDE the body.
+  // Children carry explicit tops so the fixture models real block flow: the
+  // picture first, the text lines after it.
+  const mediaIn = (holder, picturePx, textPx) => {
+    const media = holder.appendChild(new FakeElement('div', { 'data-attachment': '1' }))
+    media.rectTop = 0
+    media.rectHeight = picturePx
+    const text = holder.appendChild(new FakeElement('div'))
+    text.rectTop = picturePx
+    text.rectHeight = textPx
+  }
+  // 6 lines × 22px = 132px of text budget; the picture adds 300px of its own.
+  const short = fixture.user({}, 300 + 80)
+  mediaIn(short.bubble, 300, 80)
+  const long = fixture.user({ 'data-chat-anchor-key': 'user:2' }, 300 + 700)
+  mediaIn(long.bubble, 300, 700)
+  // The host's usual layout: the attachment row sits OUTSIDE the bubble.
+  const outside = fixture.user({ 'data-chat-anchor-key': 'user:3' }, 700, true)
+  // Keep a newer row after them, so nothing here is "the message being read".
+  fixture.user({ 'data-chat-anchor-key': 'user:4' }, 200)
   const { controller } = await boot(fixture)
   controller.rescan()
 
-  test('the attachment message stays fully visible', () => {
-    assert.equal(withImage.bubble.hasAttribute('data-lf-clamped'), false, 'no clamp')
-    assert.equal(withImage.bubble.hasAttribute('data-lf-open'), false, 'and no open flag')
-    assert.equal(withImage.anchor.querySelector('[data-lf-tail]').hasAttribute('hidden'), true, 'no control row either')
+  test('a picture plus a little text is not folded', () => {
+    assert.equal(short.bubble.hasAttribute('data-lf-clamped'), false, 'the picture ate the budget, not the text')
   })
-  test('an identical message without an attachment still folds', () => {
-    assert.equal(plain.bubble.getAttribute('data-lf-clamped'), '1', 'the rule is about attachments, not length')
+  test('a picture plus a long text still folds', () => {
+    assert.equal(long.bubble.getAttribute('data-lf-clamped'), '1', 'a picture must not cost the fold')
+  })
+  test('the fold keeps the picture whole', () => {
+    const budget = Number.parseFloat(long.bubble.parentElement.style.values['--lf-clamp-height'])
+    assert.ok(budget >= 300, `clamp height ${budget} must cover the 300px picture`)
+    assert.ok(budget <= 300 + 6 * 22 + 1, 'and add only the text budget on top')
+  })
+  test('an attachment row outside the bubble leaves the budget alone', () => {
+    assert.equal(outside.bubble.getAttribute('data-lf-clamped'), '1', 'the long text folds at 6 lines as usual')
   })
 }
 

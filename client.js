@@ -1381,9 +1381,11 @@
       /** A chevron over two bars: "every block's content" (展开所有步骤). */
       const EVERY_STEP_ICON = '<svg viewBox="0 0 16 16" fill="none" aria-hidden="true"><path d="M4.5 3.5l3.5 3 3.5-3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.5 9.5h9M3.5 12.5h9" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>'
 
+      /** An <img> at least this tall is a picture, not an inline emoji glyph. */
+      const MEDIA_MIN_PX = 40
+
       const STEP_ICON = CHEVRON_ICON
-      const ALL_ICON = DOUBLE_CHEVRON_ICON
-      /** One block's steps. */
+      const ALL_ICON = DOUBLE_CHEVRON_ICON  /** One block's steps. */
       const STEP_OPEN_LABEL = '展开本步骤'
       const STEP_FOLD_LABEL = '收起本步骤'
       /** The Turn's seams: 状态0 ⇄ 状态1/2. */
@@ -1656,27 +1658,40 @@
         return ends
       }
 
+      /**
+       * Rendered height of the media sitting INSIDE a message body, so the line budget
+       * can be spent on text only: a picture is never cut in half, and a long message
+       * with a picture still folds.
+       *
+       * Only the host's own attachment markers and real media count — an `<img>` is
+       * skipped unless it is tall enough to be a picture, because chat clients often
+       * render emoji as inline images.
+       */
+      function attachmentHeightIn(body) {
+        if (typeof body.querySelectorAll !== 'function') return 0
+        let total = 0
+        for (const node of body.querySelectorAll('[data-message-attachments], [data-attachment], img, video, audio, picture, figure')) {
+          const rect = node.getBoundingClientRect?.()
+          if (!rect || !(rect.height > 0)) continue
+          const marked = node.hasAttribute('data-message-attachments') || node.hasAttribute('data-attachment')
+          if (!marked && rect.height < MEDIA_MIN_PX) continue
+          total += rect.height
+        }
+        return Math.round(total)
+      }
+
       function measureAndClamp(anchor, side, record) {
         const { body } = record
         const lineHeight = lineHeightOf(body)
         const limits = F.settingsForSide(settings, side)
         const lines = settings.collapseAll ? settings.collapsedLines : limits.lines
-        // A message carrying an image or a file is never folded. The host renders
-        // attachments as a sibling row before the text bubble ([data-message-attachments],
-        // verified in the host's own chat bundle), but text and picture belong
-        // together: clamping the text there hides exactly what the reader just sent.
-        // Matching the host's marker — not every <img>, which would also catch emoji —
-        // keeps the rule precise. A message with no text bubble at all never gets here.
-        if (anchor.querySelector('[data-message-attachments], [data-attachment]')) {
-          removeAttr(body, 'data-lf-clamped')
-          removeAttr(body, 'data-lf-open')
-          setAttr(record.tail, 'hidden', '')
-          return
-        }
-        // The visible box is the line budget and nothing else: the control row below
-        // it is real flow, separated by the "间距" gap, so no overlay and no fade are
-        // needed to keep the last visible line readable.
-        const contentBudget = F.clampHeightFor(lines, lineHeight)
+        // An attachment inside the body keeps its FULL height — the line budget is for
+        // text, and a picture must never be cut in half. Whatever the attachment
+        // occupies is added on top of the budget, so image + 很长的正文 still folds:
+        // the picture stays whole and only the text is clipped. The host usually
+        // renders attachments in their own row OUTSIDE the bubble, in which case this
+        // is zero and nothing changes.
+        const contentBudget = F.clampHeightFor(lines, lineHeight) + attachmentHeightIn(body)
         const gap = F.gapFor(settings.extraPx)
 
         // Measurement must happen while the body is NOT clamped, otherwise
