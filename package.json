@@ -1,6 +1,6 @@
 {
-  "name": "dsh-ui-beautify",
-  "version": "0.9.5",
+  "name": "dsh-fold-polish",
+  "version": "0.9.6",
   "description": "Display polish for the DeepSeek Harness conversation: fold overlong messages and work-step blocks, resize the composer and the right sidebar, and search folded content. Pure client-side and display-only.",
   "keywords": [
     "dsh",
@@ -54,10 +54,10 @@
   "author": "FiVE0016",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FiVE0016/dsh-ui-beautify.git"
+    "url": "git+https://github.com/FiVE0016/dsh-fold-polish.git"
   },
-  "homepage": "https://github.com/FiVE0016/dsh-ui-beautify#readme",
+  "homepage": "https://github.com/FiVE0016/dsh-fold-polish#readme",
   "bugs": {
-    "url": "https://github.com/FiVE0016/dsh-ui-beautify/issues"
+    "url": "https://github.com/FiVE0016/dsh-fold-polish/issues"
   }
 }

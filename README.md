@@ -1,16 +1,16 @@
 # UI 美化
 
-> 显示名 **UI 美化**；npm 包名 **`dsh-ui-beautify`**（2026-10 从 `dsh-bubble-fold` 改名，见文末「关于改名」）。
+> 显示名 **UI 美化**；npm 包名 **`dsh-fold-polish`**（2026-10 两次改名，见文末「关于改名」）。
 
-[![npm version](https://img.shields.io/npm/v/dsh-ui-beautify.svg)](https://www.npmjs.com/package/dsh-ui-beautify)
-[![npm downloads](https://img.shields.io/npm/dm/dsh-ui-beautify.svg)](https://www.npmjs.com/package/dsh-ui-beautify)
-[![test](https://github.com/FiVE0016/dsh-ui-beautify/actions/workflows/test.yml/badge.svg)](https://github.com/FiVE0016/dsh-ui-beautify/actions/workflows/test.yml)
-[![license](https://img.shields.io/npm/l/dsh-ui-beautify.svg)](LICENSE)
+[![npm version](https://img.shields.io/npm/v/dsh-fold-polish.svg)](https://www.npmjs.com/package/dsh-fold-polish)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-fold-polish.svg)](https://www.npmjs.com/package/dsh-fold-polish)
+[![test](https://github.com/FiVE0016/dsh-fold-polish/actions/workflows/test.yml/badge.svg)](https://github.com/FiVE0016/dsh-fold-polish/actions/workflows/test.yml)
+[![license](https://img.shields.io/npm/l/dsh-fold-polish.svg)](LICENSE)
 
 给 DSH 会话加一层"阅读优先"的显示优化：**消息与工作步骤自动折叠、输入框可调、右栏占比可设、一键查找**——想看清楚的点一下就回来。
 
 ```sh
-dsh plugin --profile desktop add dsh-ui-beautify
+dsh plugin --profile desktop add dsh-fold-polish
 ```
 
 > English — A display-only plugin for DeepSeek Harness: the newest turn always stays open, while older messages and every run of work-step rows fold into one click; plus composer sizing, right-sidebar width, and find.
@@ -125,7 +125,7 @@ dsh plugin --profile desktop add dsh-ui-beautify
 从 npm 安装（推荐）：
 
 ```sh
-dsh plugin --profile desktop add dsh-ui-beautify
+dsh plugin --profile desktop add dsh-fold-polish
 ```
 
 把 `desktop` 换成你的 profile 名（网页版是 `web`），也可以在 **设置 → 插件** 里手动填包名安装。
@@ -133,7 +133,7 @@ dsh plugin --profile desktop add dsh-ui-beautify
 不想走 npm 时，也可以直接从 GitHub 安装：
 
 ```sh
-dsh plugin --profile desktop add 'github:FiVE0016/dsh-ui-beautify#v0.9.1'
+dsh plugin --profile desktop add 'github:FiVE0016/dsh-fold-polish#v0.9.1'
 ```
 
 装完**重启宿主**（`dsh web` 或桌面版）：host 半与客户端 bundle 都只在启动时加载。
@@ -142,14 +142,18 @@ MIT License
 
 ## 关于改名
 
-本插件原包名 `dsh-bubble-fold`，2026-10 改名为 **`dsh-ui-beautify`**（显示名「UI 美化」），因为功能早已不止折叠：还管输入框高度、右侧栏占比、折叠内容查找。
+本插件 2026-10 改过两次名，显示名始终是「UI 美化」：
 
-| 改了 | 说明 |
-|---|---|
-| npm 包名 / GitHub 仓库名 | `dsh-bubble-fold` → `dsh-ui-beautify`（GitHub 旧地址会自动跳转） |
-| 安装命令 | `dsh plugin --profile desktop add dsh-ui-beautify` |
-| 插件在宿主里的注册名 | `cordis.patch.yml` 的 `name` 与 `index.js` 的导出名 |
+| 时间 | 包名 | 为什么改 |
+|---|---|---|
+| 最初 | `dsh-bubble-fold` | 起点：只做气泡折叠 |
+| 第一次 | `dsh-ui-beautify` | 功能扩张到输入框、右侧栏、查找，名字跟不上 |
+| 第二次（当前） | **`dsh-fold-polish`** | 上一个名字与社区里已有的一个 UI 插件撞词，搜索时会被压在后面；这个名字不撞词，也仍然说得清"折叠 + 整体显示打磨" |
 
-**没有改**（改了会丢你的设置或纯属无谓改动）：设置存储键 `dsh.bubble-fold.settings`、根作用域属性 `data-dsh-bubble-fold`（CSS 契约）、样式标签 id、右栏 tab 的内部 id，以及调试句柄 `__DSH_BUBBLE_FOLD__`（新别名 `__DSH_UI_BEAUTIFY__` 指向同一个对象）。所以升级不会重置任何设置。
+**安装命令**：`dsh plugin --profile desktop add dsh-fold-polish`
 
-旧包 `dsh-bubble-fold` 已标记为 deprecated，仍可安装但会提示改用新名。
+改了这些：npm 包名、GitHub 仓库名（旧地址会自动跳转）、`cordis.patch.yml` 的 `name`/`id`、`index.js` 的导出名、模块加载 id、日志前缀、README 与徽章。
+
+**没有改**（改了会重置你的设置，或纯属无谓改动）：设置存储键 `dsh.bubble-fold.settings`、根作用域属性 `data-dsh-bubble-fold`（CSS 契约）、样式标签 id、右栏 tab 的内部 id，以及调试句柄 `__DSH_BUBBLE_FOLD__`（新别名 `__DSH_FOLD_POLISH__` 指向同一个对象）。所以升级不会丢任何设置。
+
+`dsh-bubble-fold` 与 `dsh-ui-beautify` 都已标记为 deprecated，仍可安装、会提示改用新名。

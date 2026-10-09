@@ -1,5 +1,12 @@
 # 更新记录
 
+## 0.9.6 — 2026-10-09
+
+- **改名**：`dsh-ui-beautify` → **`dsh-fold-polish`**（显示名仍是「UI 美化」）。上一个名字与社区里已有的一个 UI 插件撞词，搜索时会被压在后面；改成不撞词的名字，功能范围（折叠 / 输入框 / 右侧栏占比 / 查找）也仍在名字里。
+- 同步改了 `cordis.patch.yml` 的 `name` 与 `id`、`index.js` 的导出名、模块加载 id、日志前缀、调试句柄（新名 `__DSH_FOLD_POLISH__`，原 `__DSH_BUBBLE_FOLD__` 保留）以及 README/徽章/安装命令。
+- **内部标识照旧不动**（设置存储键 `dsh.bubble-fold.*`、根属性 `data-dsh-bubble-fold`、样式标签与 tab 的 id），所以升级不重置任何设置。
+- 两个旧名（`dsh-bubble-fold`、`dsh-ui-beautify`）都会标记 deprecated 指向新名。
+
 ## 0.9.5 — 2026-10-09
 
 - **README 换成当前版本的演示**：新增三帧动画 `assets/demo.gif`（状态0 一个控件 → 状态1 缝隙上展开三个控件 → 状态2 该轮步骤全开），帧取自真实构建在无头 Chrome 里跑出来的截图，裁到同一窗口所以只看到控件变化；`tools/make-demo-gif.py` 重写为三帧合成并共用调色板（428 KB → 113 KB），npm 包只带 README 真正引用的三张图（中间帧排除，省约 550 KB）。

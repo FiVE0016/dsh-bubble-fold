@@ -646,7 +646,7 @@ export function start(win, React) {
   if (!doc || !doc.documentElement) return { dispose() {} }
 
   const F = win.__DSH_BUBBLE_FOLD_MODULES__?.fold
-  if (!F) throw new Error('[dsh-ui-beautify] fold module missing from bundle')
+  if (!F) throw new Error('[dsh-fold-polish] fold module missing from bundle')
 
   const computedStyleOf = win.getComputedStyle.bind(win)
 

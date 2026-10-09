@@ -5,7 +5,7 @@
 //   1. Keep the `require` parameter and use it for platform modules (`react`).
 //      Do not fall back to `window.__ModuleLoader__.require` — it does not exist
 //      during activation, and the plugin then dies with
-//      "[ui-beautify] host module unavailable: react".
+//      "[fold-polish] host module unavailable: react".
 //   2. Never hand this bundle's own specifiers to that resolver: the host module
 //      table has never heard of "./src/browser.js", and asking it fails with
 //      `client-modules: require("./src/browser.js") missed the module table`,
@@ -19,7 +19,7 @@
 // boot graph — a DOM-only plugin registers no slot, so nothing would ever
 // request it and the bundle would never execute without it.
 window.__ModuleLoader__.load({
-  id: 'dsh-ui-beautify',
+  id: 'dsh-fold-polish',
   factory: (require) => {
     const React = require('react')
     const local = window.__DSH_BUBBLE_FOLD_MODULES__ ?? {}
@@ -93,7 +93,7 @@ window.__ModuleLoader__.load({
       controller = null
       // Leave no trace of the console handle once the row is gone.
       delete window.__DSH_BUBBLE_FOLD__
-      delete window.__DSH_UI_BEAUTIFY__
+      delete window.__DSH_FOLD_POLISH__
     }
 
     /**
@@ -410,7 +410,7 @@ window.__ModuleLoader__.load({
     }
 
     const plugin = {
-      name: 'dsh-ui-beautify',
+      name: 'dsh-fold-polish',
       inject: ['slots'],
       /**
        * The row is `dsh.client.immediately`, i.e. part of the boot graph: if this
@@ -422,7 +422,7 @@ window.__ModuleLoader__.load({
         try {
           return plugin.applyRow(ctx)
         } catch (error) {
-          console.warn('[ui-beautify] 激活时出错，本插件已降级停用（应用不受影响）：', error)
+          console.warn('[fold-polish] 激活时出错，本插件已降级停用（应用不受影响）：', error)
           return dispose
         }
       },
@@ -441,7 +441,7 @@ window.__ModuleLoader__.load({
               return
             }
             if (attempt < 10) view.setTimeout(() => setupRightbar(attempt + 1), 300)
-            else console.warn('[ui-beautify] 此宿主未暴露 layout 服务，右侧栏占比不可用')
+            else console.warn('[fold-polish] 此宿主未暴露 layout 服务，右侧栏占比不可用')
           }
           setupRightbar(0)
           controller = start({
@@ -466,7 +466,7 @@ window.__ModuleLoader__.load({
           }, React)
         } catch (error) {
           // A failed fold must never take the conversation down with it.
-          console.warn('[ui-beautify] 启动失败，气泡折叠已停用：', error)
+          console.warn('[fold-polish] 启动失败，气泡折叠已停用：', error)
           controller = null
         }
 
@@ -484,7 +484,7 @@ window.__ModuleLoader__.load({
               inject: () => ({ api })
             }, createPanel(React, api)))
           } catch (error) {
-            console.warn('[ui-beautify] 设置页注册失败，仅浮层面板可用：', error)
+            console.warn('[fold-polish] 设置页注册失败，仅浮层面板可用：', error)
             panelOff = null
           }
         }
@@ -520,7 +520,7 @@ window.__ModuleLoader__.load({
             findTabRegistered = true
             return true
           } catch (error) {
-            console.warn('[ui-beautify] 右栏查找注册失败：', error)
+            console.warn('[fold-polish] 右栏查找注册失败：', error)
             findTabOff?.()
             findPanelOff?.()
             findTitleOff?.()
@@ -540,14 +540,14 @@ window.__ModuleLoader__.load({
               done = registerFindTab()
             } catch (error) {
               // Never let an optional feature reach the host as a failed entry.
-              console.warn('[ui-beautify] 右栏查找注册出错，已放弃：', error)
+              console.warn('[fold-polish] 右栏查找注册出错，已放弃：', error)
               done = true
             }
             if (done) return
             if (++tries >= 10) {
               // Nothing to open later, so Ctrl+F must not touch the layout at all:
               // opening the column without a tab leaves the reader a blank pane.
-              console.warn('[ui-beautify] 此宿主未暴露 sidebarRightTabs，右栏「查找」不可用')
+              console.warn('[fold-polish] 此宿主未暴露 sidebarRightTabs，右栏「查找」不可用')
               return
             }
             view.setTimeout(retryFindTab, 500)
@@ -565,7 +565,7 @@ window.__ModuleLoader__.load({
             if (event.key !== 'f' || !event.ctrlKey || event.shiftKey || event.altKey) return
             event.preventDefault()
             if (!findTabRegistered) {
-              console.warn('[ui-beautify] 查找面板未注册，Ctrl+F 不做任何事（不会打开空面板）')
+              console.warn('[fold-polish] 查找面板未注册，Ctrl+F 不做任何事（不会打开空面板）')
               return
             }
             let right = null
@@ -699,7 +699,7 @@ window.__ModuleLoader__.load({
 
         // The debug handle keeps its historical name for scripts and docs; the
         // new one is an alias pointing at the same object.
-        window.__DSH_UI_BEAUTIFY__ = window.__DSH_BUBBLE_FOLD__
+        window.__DSH_FOLD_POLISH__ = window.__DSH_BUBBLE_FOLD__
 
         return dispose
       },

@@ -92,10 +92,10 @@ let ready = false
 for (let i = 0; i < 40 && !ready; i += 1) {
   await sleep(500)
   try {
-    ready = await evaluate('typeof window.__DSH_UI_BEAUTIFY__ === "object" || typeof window.__DSH_BUBBLE_FOLD__ === "object"')
+    ready = await evaluate('typeof window.__DSH_FOLD_POLISH__ === "object" || typeof window.__DSH_BUBBLE_FOLD__ === "object"')
   } catch { /* still booting */ }
 }
-const status = ready ? await evaluate('window.__DSH_UI_BEAUTIFY__?.status ?? window.__DSH_BUBBLE_FOLD__?.status ?? "missing"') : 'missing'
+const status = ready ? await evaluate('window.__DSH_FOLD_POLISH__?.status ?? window.__DSH_BUBBLE_FOLD__?.status ?? "missing"') : 'missing'
 check('控制台句柄出现', ready === true, ready ? undefined : '句柄不存在，说明客户端半没有加载')
 check('插件状态为 running', status === 'running', `status=${status}`)
 
@@ -250,7 +250,7 @@ if (!opened) {
 } else {
   await sleep(3000)
   const open = await readFrame()
-  const rightbar = await evaluate('window.__DSH_UI_BEAUTIFY__?.rightbar() ?? null')
+  const rightbar = await evaluate('window.__DSH_FOLD_POLISH__?.rightbar() ?? null')
   console.log('  ' + JSON.stringify({ ...open, ...rightbar }))
   check('右栏显示时强制了设定宽度', open.forced === true, `tracks=${open.tracks}`)
   check('实际渲染宽度等于设置', rightbar?.ratio !== null && Math.abs((rightbar?.ratio ?? 0) - (rightbar?.renderedRatio ?? -1)) <= 2,
