@@ -117,6 +117,17 @@ __DSH_BUBBLE_FOLD__.composer()               // { min, max, value, fallback, man
 
 `test/diagnose.js` 是一段可直接贴进页面控制台的自检片段，会打印宿主的步骤布局、容器/成员行数量与插件状态，排查"为什么不折"时先跑它。
 
+### 浏览器环境怎么测
+
+`test/browser-check.mjs` 是**浏览器验收检查**：它对一个正在运行的 `dsh --profile web` 界面开无头 Chrome，验证只有真浏览器才能证明的事——插件从**已安装的包**里跑起来（不是源码）、真实会话能折叠、`Ctrl+F` 交还给浏览器原生查找、打印媒体下内容完整、以及右栏收起时**没有**被 `!important` 规则占着那一列。
+
+```sh
+dsh --profile web                     # 打印 http://127.0.0.1:<port>/?token=...
+node test/browser-check.mjs "http://127.0.0.1:3080/?token=..."
+```
+
+会话为空时它会明确 SKIP 掉折叠相关的项并提示你先打开一个有内容的会话。它不是 CI 的一部分（需要真实应用在跑）。
+
 `test/live-probe.mjs` 会开一个无头 Chrome 连上**正在运行**的界面并自动跑上面这些自检（`node test/live-probe.mjs`）。注意 `dsh web` 需要 URL 里的令牌，缺令牌时它只能看到鉴权页。
 
 ## 性能：为什么它必须"懒惰"
