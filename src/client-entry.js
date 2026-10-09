@@ -97,76 +97,134 @@ window.__ModuleLoader__.load({
 
     /**
      * Two-way sync between the host's right-sidebar width (px) and the plugin
-     * setting `rightbarRatio` (percent of the frame). The host resets to 45% on
-     * first open, so the percentage lives in OUR settings to survive a restart;
-     * the px lives in the host's layout store, which we read/set/subscribe through
-     * the `layout` service. That service's documented surface is five methods, but
-     * the provided object is the full store — every extra member is probed
-     * defensively so an older host just loses this control, nothing else.
+     * setting `rightbarRatio` (percent of the frame).
+     *
+     * Verified against the host's own code: `ctx.layout` is a LayoutController
+     * whose fields are `panels` (the real store actions), `hasMainPanel`,
+     * `panelInfo` (a {getSnapshot,subscribe} facade for the CENTRAL panel only) and
+     * `navigation`. There is NO `layoutInfo` and NO `layout.setRightbar` — the
+     * width is written through `layout.panels.setRightbar(px)` and can only be
+     * READ back from the DOM (the AppFrame's resolved grid tracks), which is also
+     * what makes the manual drag observable. Everything is probed defensively, so
+     * a host without these internals simply loses this control.
      */
-    const makeRightbarControl = (layout, view, getSettings, updateSettings) => {
+    const makeRightbarControl = (layout, view, doc, getSettings, updateSettings) => {
       let disposed = false
-      const store = layout?.layoutInfo ?? null
-      const snapshot = () => {
-        try {
-          if (store && typeof store.getSnapshot === 'function') return store.getSnapshot()
-          const whole = layout?.getSnapshot?.()
-          if (whole && typeof whole === 'object' && whole.layoutInfo) return whole.layoutInfo
-        } catch { /* the host shaped it differently */ }
+      const panels = layout?.panels ?? null
+      const setRightbar = typeof panels?.setRightbar === 'function' ? panels.setRightbar
+        : (typeof layout?.setRightbar === 'function' ? layout.setRightbar : null)
+      const viewportOf = () => view?.innerWidth || 0
+      /**
+       * The AppFrame is the grid owning the three columns (sidebar | conversation |
+       * right panel). Found by walking up from something that always exists — the
+       * composer seat, else any flow row — instead of by a class name or an
+       * attribute that is only present in some states.
+       */
+      const frameOf = () => {
+        if (!doc || typeof doc.querySelector !== 'function') return null
+        let node = doc.querySelector('[data-composer-seat]') ?? doc.querySelector('[data-chat-flow-kind]') ?? doc.body
+        while (node && node !== doc.documentElement) {
+          try {
+            if (view.getComputedStyle(node).display === 'grid') return node
+          } catch { /* not inspectable */ }
+          node = node.parentElement
+        }
         return null
       }
-      const setRightbar = typeof layout?.setRightbar === 'function' ? layout.setRightbar : null
-      const subscribe = typeof store?.subscribe === 'function' ? store.subscribe
-        : (typeof layout?.subscribe === 'function' ? layout.subscribe : null)
-      const viewportOf = (info) => {
-        const px = info && Number.isFinite(info.viewportWidth) ? info.viewportWidth : 0
-        return px > 0 ? px : (view?.innerWidth || 0)
+      /** Right panel width in px, read from the frame's resolved grid tracks. */
+      const rightbarPx = () => {
+        const frame = frameOf()
+        if (!frame) return 0
+        let tracks
+        try {
+          tracks = view.getComputedStyle(frame).gridTemplateColumns
+        } catch {
+          return 0
+        }
+        const sizes = String(tracks).split(' ').map((part) => Number.parseFloat(part)).filter((px) => Number.isFinite(px))
+        return sizes.length >= 2 ? sizes[sizes.length - 1] : 0
       }
-      const ratioOf = (info) => {
-        const viewport = viewportOf(info)
-        const px = info?.rightbar
-        if (!viewport || !(px > 0)) return null
+      const ratioNow = () => {
+        const viewport = viewportOf()
+        const px = rightbarPx()
+        if (!(viewport > 0) || !(px > 0)) return null
         return Math.round((px / viewport) * 100)
       }
+      // Until our stored value has been applied, observations must not overwrite it:
+      // the host reports its own 45% default at startup, and writing that back would
+      // silently replace the reader's choice before it ever reached the store.
+      let settled = false
       let lastRatio = null
       const observe = () => {
-        const ratio = ratioOf(snapshot())
+        if (!settled) return
+        const ratio = ratioNow()
         if (ratio === null || ratio === lastRatio) return
         lastRatio = ratio
         if (getSettings()?.rightbarRatio !== ratio) updateSettings({ rightbarRatio: ratio })
       }
-      const applyStored = () => {
-        if (disposed || !setRightbar) return
+      const applyRatio = (ratio) => {
+        if (!setRightbar || !(ratio > 0)) return false
+        const viewport = viewportOf()
+        if (!(viewport > 0)) return false
+        try {
+          setRightbar(Math.round(viewport * ratio / 100))
+          return true
+        } catch {
+          return false
+        }
+      }
+      // The frame is not measurable at activation time, and the controller (which
+      // owns the settings) is created after this control, so the first attempt is
+      // deferred and every failed attempt is retried.
+      const timers = []
+      const applyStored = (attempt) => {
+        if (disposed) return
         const ratio = getSettings()?.rightbarRatio
-        const viewport = viewportOf(snapshot())
-        if (!(viewport > 0) || !Number.isFinite(ratio)) return
-        try { setRightbar(Math.round(viewport * ratio / 100)) } catch { /* no width control */ }
+        const applied = ratio > 0 ? applyRatio(ratio) : false
+        const now = ratioNow()
+        if (applied && now !== null && Math.abs(now - ratio) <= 1) {
+          settled = true
+          return
+        }
+        if (attempt < 8) {
+          timers.push(view.setTimeout(() => applyStored(attempt + 1), 300))
+          return
+        }
+        settled = !!setRightbar
       }
-      let off = null
-      if (subscribe) {
-        try { off = subscribe(observe) } catch { off = null }
-      }
-      view.setTimeout(applyStored, 0)
+      timers.push(view.setTimeout(() => applyStored(0), 0))
+
+      // A drag changes the frame's inline grid template; a window resize changes the
+      // frame. Both are read from the DOM, since the store exposes no getter.
+      let observer = null
+      try {
+        const frame = frameOf()
+        if (frame && typeof view.MutationObserver === 'function') {
+          observer = new view.MutationObserver(() => observe())
+          observer.observe(frame, { attributes: true, attributeFilter: ['style'] })
+        }
+      } catch { observer = null }
+      const onResize = () => { if (!disposed) view.setTimeout(observe, 60) }
+      try { view.addEventListener('resize', onResize) } catch { /* no window events */ }
 
       return {
         setRatio(ratio) {
           const clamped = Math.max(30, Math.min(70, Math.round(Number(ratio) || 45)))
           updateSettings({ rightbarRatio: clamped })
-          if (setRightbar) {
-            const viewport = viewportOf(snapshot())
-            try { setRightbar(Math.round(viewport * clamped / 100)) } catch { /* ignore */ }
-          }
+          settled = false
+          applyRatio(clamped)
           lastRatio = null
-          observe()
+          view.setTimeout(() => { settled = true; observe() }, 120)
         },
         info() {
-          const info = snapshot()
-          return { supported: !!setRightbar, ratio: ratioOf(info), viewport: viewportOf(info), shown: info?.rightbarShown ?? null }
+          return { supported: !!setRightbar, ratio: ratioNow(), viewport: viewportOf() }
         },
         dispose() {
           disposed = true
-          off?.()
-          off = null
+          observer?.disconnect()
+          observer = null
+          for (const timer of timers) view.clearTimeout(timer)
+          try { view.removeEventListener('resize', onResize) } catch { /* ignore */ }
         }
       }
     }
@@ -195,7 +253,7 @@ window.__ModuleLoader__.load({
           // reach `controller` lazily, and it is passed into start() for the
           // floating panel's own ratio input.
           const layout = ctx?.get?.('layout') ?? null
-          rightbar = layout ? makeRightbarControl(layout, view, () => controller?.settings(), (patch) => controller?.update(patch)) : null
+          rightbar = layout ? makeRightbarControl(layout, view, document, () => controller?.settings(), (patch) => controller?.update(patch)) : null
           controller = start({
             document,
             localStorage: view.localStorage,
@@ -364,12 +422,12 @@ window.__ModuleLoader__.load({
           layoutDebug: () => {
             const layout = ctx?.get?.('layout') ?? null
             if (!layout) return { layout: null }
-            const snapshot = (() => { try { return layout.getSnapshot?.() ?? null } catch { return null } })()
+            const panels = layout.panels ?? null
             return {
               keys: Object.keys(layout),
-              setRightbar: typeof layout.setRightbar,
-              layoutInfoKeys: layout.layoutInfo ? Object.keys(layout.layoutInfo) : null,
-              layoutInfo: snapshot?.layoutInfo ?? null
+              panelKeys: panels ? Object.keys(panels).slice(0, 40) : null,
+              setRightbar: typeof panels?.setRightbar,
+              rightbar: rightbar?.info() ?? null
             }
           },
           dispose

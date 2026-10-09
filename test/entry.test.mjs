@@ -15,16 +15,31 @@ const FIND_TAB_ID = 'bubble-fold-find'
 
 let passed = 0
 let failed = 0
+const queued = []
+/**
+ * Queue a check. Tests are collected and run in order, awaiting each one: several
+ * of them drive code that schedules work through `setTimeout`, and that work only
+ * happens once the current synchronous block ends.
+ */
 function test(name, fn) {
-  try {
-    fn()
-    passed += 1
-    console.log(`  ok   ${name}`)
-  } catch (error) {
-    failed += 1
-    console.log(`  FAIL ${name}\n       ${error.message}`)
+  queued.push({ name, fn })
+}
+
+async function runAll() {
+  for (const { name, fn } of queued) {
+    try {
+      await fn()
+      passed += 1
+      console.log(`  ok   ${name}`)
+    } catch (error) {
+      failed += 1
+      console.log(`  FAIL ${name}\n       ${error.message}`)
+    }
   }
 }
+
+/** Let every microtask-scheduled retry drain. */
+const tick = () => new Promise((resolve) => setTimeout(resolve, 5))
 
 /** Boot the entry in a sandbox with a faked loader surface. */
 const runEntry = (options = {}) => {
@@ -33,7 +48,7 @@ const runEntry = (options = {}) => {
   const fakeController = {
     applied: [],
     disposed: false,
-    settings: () => ({ enabled: true, userLines: 6, assistantLines: 10, extraPx: 8 }),
+    settings: () => ({ enabled: true, userLines: 6, assistantLines: 10, extraPx: 8, rightbarRatio: 45 }),
     update(patch) { this.applied.push(patch) },
     subscribe(fn) { this.listener = fn; return () => { this.listener = null } },
     rescan() {},
@@ -61,15 +76,20 @@ const runEntry = (options = {}) => {
     localStorage: { getItem: () => null, setItem() {} },
     getComputedStyle: () => ({}),
     requestAnimationFrame: () => 0,
-    setTimeout: (fn) => { if (typeof fn === 'function') fn(); return 0 },
+    // Real timers are asynchronous; running the callback inline would let code that
+    // waits for the controller race ahead of its own creation.
+    setTimeout: (fn) => { if (typeof fn === 'function') Promise.resolve().then(fn); return 0 },
     clearTimeout: () => {},
-    MutationObserver: class {},
+    MutationObserver: class { observe() {} disconnect() {} },
     HTMLElement: class {},
     Element: class {},
+    innerWidth: 1600,
     addEventListener: (type, handler) => { (listeners[type] ??= []).push(handler) },
     removeEventListener: () => {}
   }
-  const fakeDocument = { defaultView: null }
+  // The entry reads the DOM for the right-bar width; an empty document is the
+  // "not measurable yet" case it must survive.
+  const fakeDocument = { defaultView: null, querySelector: () => null, body: null, documentElement: null }
   const fn = new Function('window', 'document', 'console', source)
   fn(win, fakeDocument, { warn() {}, error() {}, log() {} })
   const plugin = registration.factory((name) => (name === 'react' ? fakeReact : null))
@@ -271,6 +291,37 @@ test('a hostile restricted ctx cannot make apply throw (boot must survive)', () 
   }
 })
 
+test('the right-sidebar ratio is applied through layout.panels.setRightbar', async () => {
+  const calls = []
+  const { plugin, win } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36' })
+  const ctx = {
+    slots: { inject: (_name, callback) => { callback(); return () => {} }, register: () => () => {} },
+    // The host's real shape: a LayoutController carrying the store actions as
+    // `panels`. `layout.setRightbar` does NOT exist — that wrong guess is why the
+    // setting silently did nothing on the first release of this control.
+    get: (name) => (name === 'layout' ? { panels: { setRightbar: (px) => calls.push(px) } } : undefined)
+  }
+  plugin.apply(ctx)
+  await tick()
+  assert.ok(calls.length > 0, '激活时就应用了设置里的占比')
+  assert.equal(calls[0], Math.round(1600 * 45 / 100), '像素 = 帧宽 × 占比')
+  win.__DSH_BUBBLE_FOLD__.setRightbarRatio(60)
+  assert.equal(calls.at(-1), Math.round(1600 * 60 / 100), '改设置立刻应用')
+  assert.equal(win.__DSH_BUBBLE_FOLD__.rightbar().supported, true)
+  assert.doesNotThrow(() => win.__DSH_BUBBLE_FOLD__.layoutDebug())
+})
+
+test('a host without panels.setRightbar degrades instead of throwing', () => {
+  const { plugin, win } = runEntry({ userAgent: 'Mozilla/5.0 Chrome/152 Electron/44.0.0 Safari/537.36' })
+  const ctx = {
+    slots: { inject: (_name, callback) => { callback(); return () => {} }, register: () => () => {} },
+    get: (name) => (name === 'layout' ? {} : undefined)
+  }
+  assert.doesNotThrow(() => plugin.apply(ctx), '没有设值入口也不能抛错')
+  assert.equal(win.__DSH_BUBBLE_FOLD__.rightbar().supported, false, '如实汇报不支持')
+  assert.doesNotThrow(() => win.__DSH_BUBBLE_FOLD__.setRightbarRatio(60))
+})
+
 test('a host without a slots service still gets the working fold', () => {
   const { plugin, win } = runEntry()
   plugin.apply(null)
@@ -287,5 +338,6 @@ test('dispose tears the panels down and frees the console handle', () => {
   assert.equal(win.__DSH_BUBBLE_FOLD__, undefined, 'the console handle is gone')
 })
 
+await runAll()
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exitCode = failed > 0 ? 1 : 0
