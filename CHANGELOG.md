@@ -1,5 +1,11 @@
 # 更新记录
 
+## 0.9.1 — 上架 npm
+
+- **发布到 npm registry**：安装方式简化为 `dsh plugin --profile <name> add dsh-bubble-fold`（无需再手写 GitHub 长路径）。
+- `package.json` 补充 `engines.dsh` 兼容声明与 `publishConfig.access: public`。
+- 功能与 0.9.0 完全一致，这是首个通过 npm 分发的版本。
+
 ## 0.9.0 — 首次公开发布
 
 - **折叠缝**：夹在两条消息之间的一整串工作步骤，只在「最后一个步骤行与下面那条回复之间」放**一个**控件；一串跨多轮也一起折。

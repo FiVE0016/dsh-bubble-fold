@@ -63,10 +63,20 @@
 
 ## 安装
 
+从 npm 安装（推荐）：
+
 ```sh
-dsh plugin --profile web add 'github:FiVE0016/dsh-bubble-fold#v0.9.0'
+dsh plugin --profile desktop add dsh-bubble-fold
 ```
 
-把 `web` 换成你的 profile 名（桌面版是 `desktop`），也可以在 **设置 → 插件** 里安装；装完重启宿主。
+把 `desktop` 换成你的 profile 名（网页版是 `web`），也可以在 **设置 → 插件** 里手动填包名安装。
+
+不想走 npm 时，也可以直接从 GitHub 安装：
+
+```sh
+dsh plugin --profile desktop add 'github:FiVE0016/dsh-bubble-fold#v0.9.1'
+```
+
+装完**重启宿主**（`dsh web` 或桌面版）：host 半与客户端 bundle 都只在启动时加载。
 
 MIT License
