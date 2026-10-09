@@ -2197,21 +2197,28 @@ export function start(win, React) {
   }
 
   /**
-   * The pixel height the input scroll area actually occupies right now. The
-   * first drag must start from THIS, not from the cap: otherwise the first
-   * pointermove snaps the box from its natural size to the full cap in one
-   * jump instead of growing continuously with the pointer.
+   * The pixel height the input area actually occupies right now. The first drag
+   * must start from THIS, not from the configured cap: otherwise the first
+   * pointermove snaps the box from its natural size to the cap in one jump.
+   *
+   * The scroll area is preferred, but when it cannot be resolved (a host restyle
+   * can move it) the CARD is measured instead. Never fall back to `composerHeight`:
+   * that value is a preference, not the current geometry, and using it as the drag
+   * origin made a stray click jump the box to it.
    */
   function composerVisualHeight(seat) {
     const card = composerCardOf(seat)
     const scroll = card ? composerScrollOf(card) : null
-    const rect = scroll?.getBoundingClientRect?.()
-    return rect && rect.height > 0 ? Math.round(rect.height) : composerHeight
+    for (const node of [scroll, card]) {
+      const rect = node?.getBoundingClientRect?.()
+      if (rect && rect.height > 0) return Math.round(rect.height)
+    }
+    return 0
   }
 
   function firstSeatVisualHeight() {
     const seat = composerSeats()[0]
-    return seat ? composerVisualHeight(seat) : composerHeight
+    return seat ? composerVisualHeight(seat) : 0
   }
 
   function onPointerDown(event) {
@@ -2223,7 +2230,8 @@ export function start(win, React) {
     dragState = {
       handle,
       startY: event.clientY ?? 0,
-      startVisual: firstSeatVisualHeight()
+      startVisual: firstSeatVisualHeight(),
+      moved: false
     }
     setAttr(handle, 'data-dragging', '1')
     win.addEventListener('pointermove', onPointerMove)
@@ -2231,12 +2239,20 @@ export function start(win, React) {
     win.addEventListener('pointercancel', onPointerUp)
   }
 
+  /** A click is not a drag: ignore the sub-pixel jitter a tap always produces. */
+  const DRAG_THRESHOLD_PX = 3
+
   function onPointerMove(event) {
     if (!dragState) return
     // The handle is the TOP EDGE of the composer: pulling it UP must raise the
     // edge and grow the box, so the pointer keeps touching the handle the whole
     // drag (up = taller, down = shorter).
     const delta = (event.clientY ?? 0) - dragState.startY
+    if (!dragState.moved) {
+      if (Math.abs(delta) < DRAG_THRESHOLD_PX) return
+      dragState.moved = true
+    }
+    if (!(dragState.startVisual > 0)) return
     setComposerHeight(dragState.startVisual - delta)
   }
 
