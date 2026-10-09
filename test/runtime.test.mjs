@@ -1498,10 +1498,10 @@ console.log('bundled artifact (client.js)')
         // Now the host activates the row; apply() hands back its disposer.
         disposer = plugin.apply({})
         assert.equal(typeof disposer, 'function')
-        // An empty ctx has no right-bar service, and saying so is the ONLY warning
-        // activation may produce — the fold itself must come up clean.
+        // An empty ctx has no right-bar or layout service, and saying so is the ONLY
+        // warning activation may produce — the fold itself must come up clean.
         assert.deepEqual(
-          warnings.filter((line) => !line.includes('sidebarRightTabs')),
+          warnings.filter((line) => !line.includes('sidebarRightTabs') && !line.includes('layout 服务')),
           [],
           `activation warned: ${warnings.join(' | ')}`
         )

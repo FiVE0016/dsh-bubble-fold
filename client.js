@@ -3269,11 +3269,21 @@
         applyRow(ctx) {
           if (controller !== null) return
           try {
-            // Build the width control before the controller exists: its accessors
-            // reach `controller` lazily, and it is passed into start() for the
-            // floating panel's own ratio input.
-            const layout = ctx?.get?.('layout') ?? null
-            rightbar = layout ? makeRightbarControl(layout, view, document, () => controller?.settings(), (patch) => controller?.update(patch)) : null
+            // The layout service belongs to the shell plugin and may still be
+            // activating when this row runs, exactly like sidebarRightTabs — asking
+            // once would silently disable the width control for the whole session.
+            // So keep asking for a few seconds before giving up.
+            const setupRightbar = (attempt) => {
+              if (disposed || rightbar) return
+              const layout = ctx?.get?.('layout') ?? null
+              if (layout) {
+                rightbar = makeRightbarControl(layout, view, document, () => controller?.settings(), (patch) => controller?.update(patch))
+                return
+              }
+              if (attempt < 10) view.setTimeout(() => setupRightbar(attempt + 1), 300)
+              else console.warn('[dsh-bubble-fold] 此宿主未暴露 layout 服务，右侧栏占比不可用')
+            }
+            setupRightbar(0)
             controller = start({
               document,
               localStorage: view.localStorage,
@@ -3286,7 +3296,12 @@
               Element: view.Element,
               addEventListener: view.addEventListener.bind(view),
               removeEventListener: view.removeEventListener.bind(view),
-              rightbar,
+              // Stable identity for the floating panel: the real control may be built
+              // a moment later (the layout service can activate after this row).
+              rightbar: {
+                setRatio: (ratio) => rightbar?.setRatio(ratio),
+                info: () => rightbar?.info() ?? null
+              },
               __DSH_BUBBLE_FOLD_MODULES__: { fold }
             }, React)
           } catch (error) {
@@ -3448,6 +3463,54 @@
                 panelKeys: panels ? Object.keys(panels).slice(0, 40) : null,
                 setRightbar: typeof panels?.setRightbar,
                 rightbar: rightbar?.info() ?? null
+              }
+            },
+            /**
+             * Live experiment for the right-bar width: read the frame's grid tracks,
+             * call the setter, read them again after two frames. It answers "does this
+             * host honour the call, and where does the width actually live?" without a
+             * restart cycle.
+             */
+            layoutTry: async (ratio = 60) => {
+              const layout = ctx?.get?.('layout') ?? null
+              const panels = layout?.panels ?? null
+              const frameOf = () => {
+                let node = document.querySelector('[data-composer-seat]') ?? document.querySelector('[data-chat-flow-kind]')
+                while (node && node !== document.documentElement) {
+                  if (getComputedStyle(node).display === 'grid') return node
+                  node = node.parentElement
+                }
+                for (const el of document.querySelectorAll('[data-rightbar-fullscreen], [data-rightbar-collapsed], [data-rightbar-instant]')) {
+                  if (getComputedStyle(el).display === 'grid') return el
+                }
+                return null
+              }
+              const frame = frameOf()
+              const read = () => ({
+                frameFound: !!frame,
+                tracks: frame ? getComputedStyle(frame).gridTemplateColumns : null,
+                viewport: window.innerWidth,
+                collapsed: frame ? frame.hasAttribute('data-rightbar-collapsed') : null,
+                fullscreen: frame ? frame.hasAttribute('data-rightbar-fullscreen') : null
+              })
+              const before = read()
+              const px = Math.round(window.innerWidth * ratio / 100)
+              let error = null
+              try {
+                panels?.setRightbar?.(px)
+              } catch (caught) {
+                error = String(caught)
+              }
+              await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+              return {
+                keys: layout ? Object.keys(layout) : null,
+                panelKeys: panels ? Object.keys(panels).slice(0, 40) : null,
+                setRightbar: typeof panels?.setRightbar,
+                ratio,
+                px,
+                error,
+                before,
+                after: read()
               }
             },
             dispose
