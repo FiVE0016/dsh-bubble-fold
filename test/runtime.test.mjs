@@ -1663,6 +1663,17 @@ console.log('composer resize')
     assert.equal(heightVar(), before, 'the tap never turned into a resize')
     assert.equal(scroll.style.values['min-height'], undefined, 'still unpinned')
   })
+  test('a drag from a short box never snaps up to the manual minimum', () => {
+    const handle = handleOf()
+    const natural = scroll.rectHeight
+    scroll.rectHeight = 44 // one line of input, shorter than the 72px manual floor
+    fire(win, 'document', 'pointerdown', { target: handle, clientY: 300, preventDefault() {} })
+    fire(win, 'window', 'pointermove', { clientY: 296 }) // 4px up, just past the threshold
+    assert.equal(heightVar(), '48px', '44 + 4 — never the 72px floor')
+    fire(win, 'window', 'pointerup', {})
+    scroll.rectHeight = natural
+    fire(win, 'document', 'dblclick', { target: handle })
+  })
   test('the drag origin is measured when the drag starts, not on pointerdown', () => {
     const handle = handleOf()
     fire(win, 'document', 'pointerdown', { target: handle, clientY: 200, preventDefault() {} })

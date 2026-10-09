@@ -2301,8 +2301,15 @@
         }
       }
 
-      function setComposerHeight(value) {
-        const next = Math.max(COMPOSER_MIN, Math.min(COMPOSER_MAX, Math.round(value)))
+      /**
+       * Apply a manually chosen height. `floor` matters for dragging: an empty
+       * composer is only ~44–52px tall, while the manual minimum is 72px, so dragging
+       * from a one-line box would snap it UP to 72 on the very first frame. Passing the
+       * current height as the floor keeps the first frame exactly where the reader is.
+       */
+      function setComposerHeight(value, floor = COMPOSER_MIN) {
+        const lowest = Math.max(1, Math.min(floor, COMPOSER_MAX))
+        const next = Math.max(lowest, Math.min(COMPOSER_MAX, Math.round(value)))
         if (next === composerHeight && composerManual) return
         composerHeight = next
         composerManual = true
@@ -2384,20 +2391,29 @@
        * that value is a preference, not the current geometry, and using it as the drag
        * origin made a stray click jump the box to it.
        */
-      function composerVisualHeight(seat) {
+      function composerOrigin(seat) {
         const card = composerCardOf(seat)
         const scroll = card ? composerScrollOf(card) : null
-        for (const node of [scroll, card]) {
+        const viaAnchor = !!scroll && typeof scroll.hasAttribute === 'function' && scroll.hasAttribute('data-input-scroll')
+        const candidates = [[scroll, viaAnchor ? 'input-scroll' : 'overflow-scan'], [card, 'card']]
+        for (const [node, source] of candidates) {
           const rect = node?.getBoundingClientRect?.()
-          if (rect && rect.height > 0) return Math.round(rect.height)
+          if (rect && rect.height > 0) return { px: Math.round(rect.height), source }
         }
-        return 0
+        return { px: 0, source: 'none' }
+      }
+
+      function composerVisualHeight(seat) {
+        return composerOrigin(seat).px
       }
 
       function firstSeatVisualHeight() {
         const seat = composerSeats()[0]
         return seat ? composerVisualHeight(seat) : 0
       }
+
+      /** The last few drag starts, so a bad first frame can be reported with numbers. */
+      const dragSamples = []
 
       function onPointerDown(event) {
         const target = event.target
@@ -2432,13 +2448,38 @@
         const y = event.clientY ?? 0
         if (!dragState.moved) {
           if (Math.abs(y - dragState.startY) < DRAG_THRESHOLD_PX) return
-          const origin = firstSeatVisualHeight()
-          if (!(origin > 0)) return
+          const seat = composerSeats()[0]
+          const origin = seat ? composerOrigin(seat) : { px: 0, source: 'none' }
+          if (!(origin.px > 0)) return
           dragState.moved = true
-          dragState.baseVisual = origin
+          dragState.baseVisual = origin.px
+          dragState.scrollSource = origin.source
         }
         if (!(dragState.baseVisual > 0)) return
-        setComposerHeight(dragState.baseVisual - (y - dragState.startY))
+        const applied = dragState.baseVisual - (y - dragState.startY)
+        // The floor is the manual minimum, EXCEPT while the box is shorter than it: an
+        // empty composer is ~44–52px, and clamping that up to 72 is exactly the "first
+        // frame jump" the reader sees. Dragging down stays possible either way.
+        const floor = Math.min(COMPOSER_MIN, dragState.baseVisual)
+        setComposerHeight(applied, floor)
+        if (!dragState.logged) {
+          dragState.logged = true
+          dragState.sample = {
+            from: dragState.baseVisual,
+            picked: dragState.scrollSource,
+            delta: y - dragState.startY
+          }
+        }
+        const seat = composerSeats()[0]
+        const sample = dragState.sample
+        if (sample && seat) {
+          sample.applied = composerHeight
+          win.requestAnimationFrame(() => {
+            sample.actual = composerVisualHeight(seat)
+            dragSamples.push(sample)
+            if (dragSamples.length > 8) dragSamples.shift()
+          })
+        }
       }
 
       function onPointerUp() {
@@ -2755,7 +2796,20 @@
          * The composer height is a host-CSS knob rather than a plugin setting, so the
          * settings page asks for it separately (range, current value, stock fallback).
          */
-        composer: () => ({ min: COMPOSER_MIN, max: COMPOSER_MAX, value: composerHeight, fallback: F.COMPOSER_DEFAULT }),
+        composer: () => ({
+          min: COMPOSER_MIN,
+          max: COMPOSER_MAX,
+          value: composerHeight,
+          fallback: F.COMPOSER_DEFAULT,
+          manual: composerManual
+        }),
+        /**
+         * Self-recorded drag samples: where the origin came from, what we applied and
+         * what the box actually measured one frame later. `actual !== applied` means the
+         * host ignored or re-laid-out our value, which is the only way to tell that
+         * apart from a bad origin.
+         */
+        dragLog: () => dragSamples.slice(),
         // The sidebar find panel: search the rendered conversation (folded content
         // included) and reveal one hit by unfolding whatever hides it.
         search: searchConversation,
@@ -3472,6 +3526,8 @@
             revealAt: (element) => controller?.revealAt(element),
             setHeight: (value) => controller?.setHeight(value),
             resetHeight: () => controller?.resetHeight(),
+            composer: () => controller?.composer() ?? null,
+            dragLog: () => controller?.dragLog() ?? [],
             setRightbarRatio: (ratio) => rightbar?.setRatio(ratio),
             rightbar: () => rightbar?.info() ?? null,
             // Diagnostic for the right-sidebar width feature: dumps the host layout

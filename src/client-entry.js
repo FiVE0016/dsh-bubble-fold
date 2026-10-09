@@ -437,6 +437,8 @@ window.__ModuleLoader__.load({
           revealAt: (element) => controller?.revealAt(element),
           setHeight: (value) => controller?.setHeight(value),
           resetHeight: () => controller?.resetHeight(),
+          composer: () => controller?.composer() ?? null,
+          dragLog: () => controller?.dragLog() ?? [],
           setRightbarRatio: (ratio) => rightbar?.setRatio(ratio),
           rightbar: () => rightbar?.info() ?? null,
           // Diagnostic for the right-sidebar width feature: dumps the host layout
